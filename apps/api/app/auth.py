@@ -1,4 +1,5 @@
 """JWT cookie helpers and auth dependencies."""
+
 from __future__ import annotations
 
 import hmac
@@ -75,14 +76,20 @@ def sign_staff_token() -> str:
     now = int(time.time())
     return jwt.encode(
         {"role": "staff", "iat": now, "exp": now + STAFF_TTL_SECONDS},
-        config.JWT_SECRET, algorithm="HS256",
+        config.JWT_SECRET,
+        algorithm="HS256",
     )
 
 
 def set_staff_cookie(response: Response) -> None:
     response.set_cookie(
-        STAFF_COOKIE, sign_staff_token(), max_age=STAFF_TTL_SECONDS,
-        httponly=True, samesite="strict", secure=config.COOKIE_SECURE, path="/api/store",
+        STAFF_COOKIE,
+        sign_staff_token(),
+        max_age=STAFF_TTL_SECONDS,
+        httponly=True,
+        samesite="strict",
+        secure=config.COOKIE_SECURE,
+        path="/api/store",
     )
 
 

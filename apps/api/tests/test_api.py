@@ -1,10 +1,19 @@
 import pytest
 
-SIGNUP = {"name": "Ada", "phone": "08011111111", "email": "Ada@Example.com",
-          "password": "secret123", "passwordConfirm": "secret123"}
-ORDER = {"items": [{"productId": "p1", "optionIndex": 1, "qty": 2}],
-         "address": "12 Market Rd", "phone": "08022222222", "city": "Ibadan",
-         "payMethod": "delivery"}
+SIGNUP = {
+    "name": "Ada",
+    "phone": "08011111111",
+    "email": "Ada@Example.com",
+    "password": "secret123",
+    "passwordConfirm": "secret123",
+}
+ORDER = {
+    "items": [{"productId": "p1", "optionIndex": 1, "qty": 2}],
+    "address": "12 Market Rd",
+    "phone": "08022222222",
+    "city": "Ibadan",
+    "payMethod": "delivery",
+}
 
 
 def signup(c, **over):
@@ -28,12 +37,18 @@ def test_signup_login_me_logout(client):
     assert r.status_code == 200 and r.json()["name"] == "Ada"
 
 
-@pytest.mark.parametrize("over,msg", [
-    ({"name": ""}, "Please add your name and phone number."),
-    ({"email": ""}, "Please fill in email and password."),
-    ({"password": "abc", "passwordConfirm": "abc"}, "Password should be at least 6 characters."),
-    ({"passwordConfirm": "different"}, "Passwords don't match. Please re-enter them."),
-])
+@pytest.mark.parametrize(
+    "over,msg",
+    [
+        ({"name": ""}, "Please add your name and phone number."),
+        ({"email": ""}, "Please fill in email and password."),
+        (
+            {"password": "abc", "passwordConfirm": "abc"},
+            "Password should be at least 6 characters.",
+        ),
+        ({"passwordConfirm": "different"}, "Passwords don't match. Please re-enter them."),
+    ],
+)
 def test_signup_validation(client, over, msg):
     r = signup(client, **over)
     assert r.status_code == 400 and r.json()["error"] == msg
@@ -47,14 +62,25 @@ def test_duplicate_email(client):
 
 def test_bad_login(client):
     signup(client)
-    assert client.post("/api/auth/login", json={"email": "ada@example.com", "password": "nope"}).status_code == 401
-    assert client.post("/api/auth/login", json={"email": "x@y.com", "password": "nope"}).status_code == 401
+    assert (
+        client.post(
+            "/api/auth/login", json={"email": "ada@example.com", "password": "nope"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post("/api/auth/login", json={"email": "x@y.com", "password": "nope"}).status_code
+        == 401
+    )
     assert client.post("/api/auth/login", json={}).status_code == 400
 
 
 def test_lookup(client):
     signup(client)
-    assert client.get("/api/auth/lookup/ADA@example.com").json() == {"name": "Ada", "email": "ada@example.com"}
+    assert client.get("/api/auth/lookup/ADA@example.com").json() == {
+        "name": "Ada",
+        "email": "ada@example.com",
+    }
     assert client.get("/api/auth/lookup/ghost@x.com").status_code == 404
 
 
@@ -80,16 +106,19 @@ def test_pay_before_status(client):
     assert o["status"] == "Payment confirmed"
 
 
-@pytest.mark.parametrize("patch,code", [
-    ({"items": []}, 400),
-    ({"items": [{"productId": "zzz", "optionIndex": 0, "qty": 1}]}, 400),
-    ({"items": [{"productId": "p1", "optionIndex": 99, "qty": 1}]}, 400),
-    ({"items": [{"productId": "p1", "optionIndex": 0, "qty": 0}]}, 400),
-    ({"items": [{"productId": "p1", "optionIndex": 0, "qty": -3}]}, 400),
-    ({"items": [{"productId": "p1", "optionIndex": 0, "qty": 1.5}]}, 400),
-    ({"address": ""}, 400),
-    ({"payMethod": "bitcoin"}, 400),
-])
+@pytest.mark.parametrize(
+    "patch,code",
+    [
+        ({"items": []}, 400),
+        ({"items": [{"productId": "zzz", "optionIndex": 0, "qty": 1}]}, 400),
+        ({"items": [{"productId": "p1", "optionIndex": 99, "qty": 1}]}, 400),
+        ({"items": [{"productId": "p1", "optionIndex": 0, "qty": 0}]}, 400),
+        ({"items": [{"productId": "p1", "optionIndex": 0, "qty": -3}]}, 400),
+        ({"items": [{"productId": "p1", "optionIndex": 0, "qty": 1.5}]}, 400),
+        ({"address": ""}, 400),
+        ({"payMethod": "bitcoin"}, 400),
+    ],
+)
 def test_order_validation(client, patch, code):
     signup(client)
     assert client.post("/api/orders", json={**ORDER, **patch}).status_code == code
@@ -118,14 +147,20 @@ def test_store_feed_open_in_dev(client):
 
 def test_store_feed_needs_key_when_configured(client, monkeypatch):
     from app import config
+
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
     assert client.get("/api/store/notifications").status_code == 401
-    assert client.get("/api/store/notifications", headers={"X-Staff-Key": "wrong"}).status_code == 401
-    assert client.get("/api/store/notifications", headers={"X-Staff-Key": "s3cret"}).status_code == 200
+    assert (
+        client.get("/api/store/notifications", headers={"X-Staff-Key": "wrong"}).status_code == 401
+    )
+    assert (
+        client.get("/api/store/notifications", headers={"X-Staff-Key": "s3cret"}).status_code == 200
+    )
 
 
 def test_store_feed_disabled_in_production_without_key(client, monkeypatch):
     from app import config
+
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     assert client.get("/api/store/notifications").status_code == 403
     assert client.post("/api/store/login", json={"key": "x"}).status_code == 403
@@ -134,6 +169,7 @@ def test_store_feed_disabled_in_production_without_key(client, monkeypatch):
 
 def test_staff_login_flow(client, monkeypatch):
     from app import config
+
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     assert client.get("/api/store/session").json() == {"enabled": True, "staff": False}
@@ -152,6 +188,7 @@ def test_staff_login_flow(client, monkeypatch):
 
 def test_customer_cookie_is_not_staff(client, monkeypatch):
     from app import config
+
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
     signup(client)
     assert client.get("/api/store/notifications").status_code == 401
@@ -159,14 +196,19 @@ def test_customer_cookie_is_not_staff(client, monkeypatch):
 
 def test_staff_login_rate_limited(client, monkeypatch):
     from app import config
+
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
-    codes = [client.post("/api/store/login", json={"key": "guess%d" % i}).status_code for i in range(8)]
+    codes = [
+        client.post("/api/store/login", json={"key": f"guess{i}"}).status_code for i in range(8)
+    ]
     assert codes[:5] == [401] * 5 and 429 in codes
 
 
 def test_login_rate_limit(client):
-    codes = [client.post("/api/auth/login", json={"email": "a@b.com", "password": "x"}).status_code
-             for _ in range(12)]
+    codes = [
+        client.post("/api/auth/login", json={"email": "a@b.com", "password": "x"}).status_code
+        for _ in range(12)
+    ]
     assert 429 in codes
 
 
@@ -179,11 +221,13 @@ def test_frontend_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "<html" in r.text.lower()
     assert client.get("/some/spa/route").status_code == 200
-    assert client.get("/../backend/server.js").status_code in (200,)  # falls back to index, never leaks
+    assert client.get("/../app/main.py").status_code == 200  # falls back to index, never leaks
 
 
 def test_production_requires_jwt_secret(monkeypatch):
-    import importlib, sys
+    import importlib
+    import sys
+
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.delenv("JWT_SECRET", raising=False)
     for m in [m for m in sys.modules if m == "app" or m.startswith("app.")]:

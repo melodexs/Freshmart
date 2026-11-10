@@ -1,4 +1,5 @@
 """Tiny in-memory sliding-window limiter for auth endpoints."""
+
 from __future__ import annotations
 
 import time
@@ -20,7 +21,9 @@ def limit(request: Request, bucket: str, max_hits: int, window_s: int) -> None:
     while q and now - q[0] > window_s:
         q.popleft()
     if len(q) >= max_hits:
-        raise HTTPException(status_code=429, detail="Too many attempts. Please wait a minute and try again.")
+        raise HTTPException(
+            status_code=429, detail="Too many attempts. Please wait a minute and try again."
+        )
     q.append(now)
 
 

@@ -1,4 +1,5 @@
 """Environment-driven settings."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", BASE_DIR.parent / "frontend"))
+FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", BASE_DIR.parent / "web"))
 DATA_FILE = Path(os.environ.get("DATA_FILE", BASE_DIR / "data" / "db.json"))
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()

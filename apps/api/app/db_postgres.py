@@ -2,10 +2,11 @@
 
 Same schema as the Node version, so an existing Render database keeps working.
 """
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -17,7 +18,7 @@ _pool: asyncpg.Pool | None = None
 def _dsn() -> str:
     url = config.DATABASE_URL
     if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+        url = "postgresql://" + url[len("postgres://") :]
     return url
 
 
@@ -47,7 +48,7 @@ async def init() -> None:
 def _iso(v) -> str:
     """Same ISO format as the file store and the Node version: ...Z"""
     if isinstance(v, datetime):
-        return v.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return v.astimezone(UTC).isoformat().replace("+00:00", "Z")
     return v
 
 
@@ -71,7 +72,10 @@ async def save_user(user: dict) -> None:
         await c.execute(
             """INSERT INTO users (email,name,phone,pass_hash) VALUES ($1,$2,$3,$4)
                ON CONFLICT (email) DO UPDATE SET name=$2, phone=$3, pass_hash=$4""",
-            user["email"], user["name"], user["phone"], user["passHash"],
+            user["email"],
+            user["name"],
+            user["phone"],
+            user["passHash"],
         )
 
 
@@ -80,7 +84,10 @@ async def create_user(user: dict) -> bool:
         res = await c.execute(
             """INSERT INTO users (email,name,phone,pass_hash) VALUES ($1,$2,$3,$4)
                ON CONFLICT (email) DO NOTHING""",
-            user["email"], user["name"], user["phone"], user["passHash"],
+            user["email"],
+            user["name"],
+            user["phone"],
+            user["passHash"],
         )
     return res.endswith(" 1")
 
@@ -89,13 +96,19 @@ def _order(r) -> dict:
     items = r["items"]
     detail = r["payment_detail"]
     return {
-        "id": r["id"], "date": _iso(r["date"]),
+        "id": r["id"],
+        "date": _iso(r["date"]),
         "items": json.loads(items) if isinstance(items, str) else items,
-        "subtotal": r["subtotal"], "deliveryFee": r["delivery_fee"], "total": r["total"],
-        "address": r["address"], "phone": r["phone"], "city": r["city"],
+        "subtotal": r["subtotal"],
+        "deliveryFee": r["delivery_fee"],
+        "total": r["total"],
+        "address": r["address"],
+        "phone": r["phone"],
+        "city": r["city"],
         "payMethod": r["pay_method"],
         "paymentDetail": json.loads(detail) if isinstance(detail, str) else detail,
-        "status": r["status"], "user": r["user_email"],
+        "status": r["status"],
+        "user": r["user_email"],
     }
 
 
@@ -111,9 +124,19 @@ async def add_order(o: dict) -> None:
             """INSERT INTO orders (id,date,items,subtotal,delivery_fee,total,address,phone,
                  city,pay_method,payment_detail,status,user_email)
                VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)""",
-            o["id"], _ts(o["date"]), json.dumps(o["items"]), o["subtotal"], o["deliveryFee"],
-            o["total"], o["address"], o["phone"], o["city"], o["payMethod"],
-            json.dumps(o.get("paymentDetail") or {}), o["status"], o["user"],
+            o["id"],
+            _ts(o["date"]),
+            json.dumps(o["items"]),
+            o["subtotal"],
+            o["deliveryFee"],
+            o["total"],
+            o["address"],
+            o["phone"],
+            o["city"],
+            o["payMethod"],
+            json.dumps(o.get("paymentDetail") or {}),
+            o["status"],
+            o["user"],
         )
 
 
@@ -127,5 +150,7 @@ async def add_store_sms(e: dict) -> None:
     async with _pool.acquire() as c:
         await c.execute(
             "INSERT INTO store_sms (id,text,date) VALUES ($1,$2,$3)",
-            e["id"], e["text"], _ts(e["date"]),
+            e["id"],
+            e["text"],
+            _ts(e["date"]),
         )

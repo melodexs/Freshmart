@@ -3,6 +3,7 @@
 Writes are guarded by a lock and are atomic (temp file + rename), which fixes
 the concurrent-write weakness of the original Node version for single-process use.
 """
+
 from __future__ import annotations
 
 import json

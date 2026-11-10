@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -72,16 +72,18 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
             qty = int(qty)
         if not isinstance(qty, int) or isinstance(qty, bool) or qty <= 0 or qty > MAX_QTY:
             return err(400, f"Invalid quantity for {product['name']}.")
-        lines.append({
-            "name": f"{product['name']} ({option['label']})",
-            "qty": qty,
-            "price": option["price"],
-            "note": str(raw.get("note") or "")[:300],
-        })
+        lines.append(
+            {
+                "name": f"{product['name']} ({option['label']})",
+                "qty": qty,
+                "price": option["price"],
+                "note": str(raw.get("note") or "")[:300],
+            }
+        )
 
-    subtotal = sum(l["price"] * l["qty"] for l in lines)
+    subtotal = sum(line["price"] * line["qty"] for line in lines)
     total = subtotal + DELIVERY_FEE
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     city_s = str(city) if city else ""
 
     order = {
@@ -91,20 +93,25 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "subtotal": subtotal,
         "deliveryFee": DELIVERY_FEE,
         "total": total,
-        "address": str(address), "phone": str(phone), "city": city_s,
+        "address": str(address),
+        "phone": str(phone),
+        "city": city_s,
         "payMethod": pay_method,
         "paymentDetail": payment_detail if isinstance(payment_detail, dict) else {},
-        "status": "Payment confirmed" if pay_method == "before"
-                  else "Awaiting delivery — pay on arrival",
+        "status": "Payment confirmed"
+        if pay_method == "before"
+        else "Awaiting delivery — pay on arrival",
         "user": user["email"],
     }
     await db.add_order(order)
 
     # Simulated store SMS (see README: real SMS needs a gateway such as Termii).
-    summary = ", ".join(f"{l['qty']}x {l['name']}" for l in lines)
+    summary = ", ".join(f"{line['qty']}x {line['name']}" for line in lines)
     pay_line = "PAID (before delivery)" if pay_method == "before" else "Pay on delivery"
-    text = (f"New order {order['id']} — ₦{naira(total)}. {summary}. "
-            f"Deliver to: {order['address']}, {city_s}. Customer: {order['phone']}. {pay_line}.")
+    text = (
+        f"New order {order['id']} — ₦{naira(total)}. {summary}. "
+        f"Deliver to: {order['address']}, {city_s}. Customer: {order['phone']}. {pay_line}."
+    )
     await db.add_store_sms({"id": order["id"], "text": text, "date": now})
 
     return {"order": order}

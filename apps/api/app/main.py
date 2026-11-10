@@ -1,4 +1,5 @@
 """Freshmart (Fatoke Market) backend: FastAPI port of the Express server."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -24,7 +25,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Freshmart API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(
+    title="Freshmart API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
+)
 
 
 # Keep the {"error": "..."} shape the frontend already expects.

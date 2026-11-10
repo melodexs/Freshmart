@@ -36,7 +36,10 @@ async def staff_logout():
 @router.get("/session")
 async def staff_session(request: Request):
     """Lets the UI know whether to show the sign-in form or the feed."""
-    return {"enabled": auth.staff_enabled(), "staff": auth.staff_enabled() and auth.is_staff(request)}
+    return {
+        "enabled": auth.staff_enabled(),
+        "staff": auth.staff_enabled() and auth.is_staff(request),
+    }
 
 
 @router.get("/notifications", dependencies=[Depends(auth.require_staff)])
