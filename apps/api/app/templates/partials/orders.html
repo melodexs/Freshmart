@@ -1,0 +1,19 @@
+{% if not orders %}
+  <div class="empty-note">No orders yet. Your first one will show up here.</div>
+{% else %}
+  {% for o in orders %}
+  <div class="order-hist-item">
+    <div style="display:flex;justify-content:space-between;font-weight:600;">
+      <span>{{ o.id }}</span><span>{{ o.total|naira }}</span>
+    </div>
+    <div style="opacity:.7;font-size:.8rem;">{{ o.date|local_time }}</div>
+    <div style="margin-top:4px;">
+      {%- for i in o["items"] -%}
+        {{ i.qty }}× {{ i.name }}{% if i.note %} — "{{ i.note }}"{% endif %}{% if not loop.last %}, {% endif %}
+      {%- endfor -%}
+    </div>
+    {% if o.note %}<div style="margin-top:4px;">Note: {{ o.note }}</div>{% endif %}
+    <div style="margin-top:4px;opacity:.8;">{{ o.status }}</div>
+  </div>
+  {% endfor %}
+{% endif %}

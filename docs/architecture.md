@@ -1,33 +1,47 @@
 # Architecture
 
-One deployable service. The FastAPI app in `apps/api` serves the JSON API under `/api/*` and the static storefront from `apps/web`, so there is a single origin and no CORS configuration.
+One deployable service. The FastAPI app in `apps/api` renders the pages, serves the JSON API under `/api/*`, and serves static files from `apps/web/static`, so there is a single origin and no CORS configuration.
 
 ## apps/api
 
 ```
 app/
-├── main.py          App setup, error shape, security headers, serves the frontend
+├── main.py          App setup, error shape, security headers, static files
 ├── config.py        Environment-driven settings (the only place env vars are read)
 ├── products.py      The product catalog: the single source of truth for prices
 ├── auth.py          Customer session (JWT in httpOnly cookie) and staff session
 ├── ratelimit.py     In-memory per-IP limiter for sensitive endpoints
+├── templating.py    Jinja2 setup (autoescape on) and the ₦ / date filters
 ├── db.py            Chooses the file store or Postgres at startup
 ├── db_file.py       JSON file store (local development)
 ├── db_postgres.py   Postgres store using asyncpg
+├── templates/       Jinja2 pages and HTML fragments
 └── routes/
-    ├── auth.py      signup, login, logout, me, email lookup
-    ├── products.py  GET /api/products
-    ├── orders.py    place an order, list my orders
-    └── store.py     staff login and the store notification feed
+    ├── ui.py        Server-rendered pages + HTMX fragments (/, /ui/*, /api/store/ui/*)
+    ├── auth.py      JSON: signup, login, logout, me, email lookup
+    ├── products.py  JSON: GET /api/products
+    ├── orders.py    JSON: place an order, list my orders
+    └── store.py     JSON: staff login and the store notification feed
 tests/               pytest suite (runs against the file store)
 ```
 
 ## apps/web
 
-Plain HTML, CSS and JavaScript with no build step. `app.js` fetches the catalog from the API, keeps the cart in memory, and calls `/api/*` for accounts and orders. All customer-supplied text is escaped before it is rendered.
+```
+src/        TypeScript (strict) for the parts that must run in the browser
+static/
+├── styles.css
+├── vendor/htmx.min.js      HTMX, vendored so there is no CDN dependency
+└── js/main.js              Compiled bundle. Committed, so Render needs no Node.
+```
+
+**Who does what.** The server renders everything that is just data: the page, product grid with search and category filter, sign-in and sign-up forms, order history and the staff inbox. HTMX swaps those HTML fragments in. TypeScript handles only what needs the browser: the in-memory cart, the checkout steps, the simulated card/OTP flow, modals and toasts. The TypeScript builds DOM nodes with `textContent`, never `innerHTML`, so there is no path for user text to become markup.
+
+**Building.** `make build-web` compiles `src/` into `static/js/main.js`. Commit the result. CI rebuilds it and fails if the committed file is stale.
 
 ## Key design decisions
 
+- **Pages are rendered on the server.** Jinja2 autoescapes every value, so customer text (names, addresses, notes) cannot become markup.
 - **Prices are never trusted from the browser.** The API recalculates every order total from `products.py`.
 - **The database is swappable.** Routes only call functions in `db.py`. `db_file.py` and `db_postgres.py` implement the same functions, chosen by whether `DATABASE_URL` is set.
 - **Two separate sessions.** Customers get an `fm_token` cookie. Staff get an `fm_staff` cookie scoped to `/api/store`. A customer cookie never grants staff access.

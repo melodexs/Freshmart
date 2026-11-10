@@ -8,7 +8,7 @@
 - **Prices** are always recalculated on the server.
 - **Store inbox** requires a staff key, exchanged for a separate `SameSite=Strict` cookie scoped to `/api/store`. A customer session never grants staff access.
 - **Rate limiting** applies to signup, login, email lookup and staff login.
-- **Script injection**: customer-supplied text (addresses, notes, payment details, server messages) is HTML-escaped wherever the UI renders it.
+- **Script injection**: pages are rendered by Jinja2 with autoescape on, and the TypeScript only sets `textContent`. Customer text (names, addresses, notes) is never parsed as HTML. Browser tests cover this.
 - **Order IDs** are random, so they cannot collide or be guessed from timing.
 
 ## Known limits

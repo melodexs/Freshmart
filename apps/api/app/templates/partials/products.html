@@ -1,0 +1,29 @@
+{# Product grid. Also resets the category nav + heading via out-of-band swaps. #}
+<div class="section-title"><h2 id="sectionHeading">{{ "All products" if active == "All" else active }}</h2></div>
+<div class="grid" id="productGrid">
+{% for p in products %}
+  <div class="card" data-product-id="{{ p.id }}">
+    <div class="thumb">{{ p.emoji }}</div>
+    <h3>{{ p.name }}</h3>
+    {% if p.options|length > 1 %}
+      <select class="opt-select" aria-label="Choose size for {{ p.name }}">
+        {% for o in p.options %}<option value="{{ loop.index0 }}" data-price="{{ o.price }}">{{ o.label }}</option>{% endfor %}
+      </select>
+    {% else %}
+      <div class="unit">{{ p.options[0].label }}</div>
+    {% endif %}
+    <div class="row"><div class="price">{{ p.options[0].price|naira }}</div></div>
+    <div class="qtyArea"></div>
+    <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "options": p.options}|tojson }}</script>
+  </div>
+{% else %}
+  <div class="empty-note">No products match your search.</div>
+{% endfor %}
+</div>
+<nav class="cats" id="catNav" hx-swap-oob="true"><div class="wrap">
+  {% for c in categories %}
+  <button type="button" class="{{ 'active' if c == active }}" hx-get="/ui/products" hx-vals='{"cat": {{ c|tojson|forceescape }}}'
+          hx-include="#searchInput" hx-target="#catalog">{{ c }}</button>
+  {% endfor %}
+</div></nav>
+<input type="hidden" id="activeCat" name="cat" value="{{ active }}" hx-swap-oob="true">

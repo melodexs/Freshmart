@@ -1,12 +1,12 @@
 # Freshmart
 
-**Fatoke Market**: a grocery delivery demo. A Python (FastAPI) API that also serves a plain HTML/CSS/JS storefront, in one repository.
+**Fatoke Market**: a grocery delivery demo. A Python (FastAPI) app that renders its own pages (Jinja2 + HTMX), with TypeScript for the cart and checkout, in one repository.
 
 ```
 Freshmart/
 ├── apps/
 │   ├── api/        Python FastAPI backend (accounts, orders, staff inbox)
-│   └── web/        Storefront: index.html, styles.css, app.js
+│   └── web/        TypeScript source (src/), CSS, HTMX and the compiled bundle (static/)
 ├── docs/           Architecture, API reference, deployment, security
 ├── scripts/        Small helpers (secrets, cleanup)
 ├── .github/        CI workflow and pull request template
@@ -16,13 +16,14 @@ Freshmart/
 
 ## Quick start
 
-You need Python 3.11 or newer.
+You need Python 3.11 or newer, and Node 20+ only if you change the TypeScript.
 
 ```bash
-make setup     # create apps/api/.venv and install dependencies
+make setup     # create apps/api/.venv, install Python and TypeScript dependencies
 make dev       # http://localhost:4000 (API and storefront together)
 make test      # run the test suite
-make lint      # check code style (make format to fix)
+make lint      # check Python style and type-check the TypeScript (make format to fix)
+make build-web # recompile TypeScript after editing apps/web/src (commit the result)
 ```
 
 Run `make help` for the full list. With no `DATABASE_URL` set, data is kept in a local JSON file (`apps/api/data/db.json`). Set `DATABASE_URL` to use Postgres.
