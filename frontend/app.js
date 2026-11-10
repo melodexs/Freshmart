@@ -133,7 +133,7 @@ function renderCartDrawer(){
       <div class="grow">
         <div class="name">${l.p.name}</div>
         <div class="sub">${l.o.label} · ${l.qty} × ${money(l.unitPrice)}</div>
-        ${l.note?`<div class="sub" style="font-style:italic;">"${l.note.replace(/</g,"&lt;")}"</div>`:""}
+        ${l.note?`<div class="sub" style="font-style:italic;">"${escHtml(l.note)}"</div>`:""}
       </div>
       <div style="text-align:right;">
         <div style="font-weight:600;font-size:.85rem;">${money(l.subtotal)}</div>
@@ -208,7 +208,7 @@ document.getElementById("closeAuth").onclick = closeAuthFn;
 authOverlay.onclick = e=>{ if(e.target===authOverlay) closeAuthFn(); };
 
 function showAuthMsg(text,type){
-  document.getElementById("authMsg").innerHTML = `<div class="msg ${type}">${text}</div>`;
+  document.getElementById("authMsg").innerHTML = `<div class="msg ${escHtml(type)}">${escHtml(text)}</div>`;
 }
 document.getElementById("notYouBtn").onclick = ()=>{
   document.getElementById("quickSignin").style.display = "none";
@@ -255,7 +255,7 @@ document.getElementById("createAcctBtn").onclick = openSignup;
 document.getElementById("closeSignup").onclick = closeSignupFn;
 signupOverlay.onclick = e=>{ if(e.target===signupOverlay) closeSignupFn(); };
 function showSignupMsg(text,type){
-  document.getElementById("signupMsg").innerHTML = `<div class="msg ${type}">${text}</div>`;
+  document.getElementById("signupMsg").innerHTML = `<div class="msg ${escHtml(type)}">${escHtml(text)}</div>`;
 }
 document.getElementById("signupSubmit").onclick = async ()=>{
   const name = document.getElementById("suName").value.trim();
@@ -387,7 +387,7 @@ function renderReview(){
       <div class="grow">
         <div class="name">${l.p.name}</div>
         <div class="sub">${l.o.label} · ${money(l.unitPrice)} each</div>
-        ${l.note?`<div class="sub" style="font-style:italic;">"${l.note.replace(/</g,"&lt;")}"</div>`:""}
+        ${l.note?`<div class="sub" style="font-style:italic;">"${escHtml(l.note)}"</div>`:""}
         <div class="stepper" style="margin-top:6px;">
           <button data-k="${l.key}" data-d="-1" aria-label="Decrease">−</button>
           <span>${l.qty}</span>
@@ -421,7 +421,7 @@ function updatePlaceOrderLabel(){
   document.getElementById("placeOrderBtn").textContent = "Place order — " + money(checkoutTotal());
 }
 function showCoMsg(text,type){
-  document.getElementById("checkoutMsg").innerHTML = `<div class="msg ${type}">${text}</div>`;
+  document.getElementById("checkoutMsg").innerHTML = `<div class="msg ${escHtml(type)}">${escHtml(text)}</div>`;
 }
 document.getElementById("placeOrderBtn").onclick = ()=>{
   if(!cartLines().length){ showCoMsg("Your cart is empty.","error"); return; }
@@ -482,24 +482,65 @@ async function finalizeOrder({address, phone}, paymentDetail){
 }
 function showSmsToast(text){
   const toast = document.getElementById("smsToast");
-  toast.innerHTML = `📩 <strong>SMS sent to store</strong><br>${text}`;
+  toast.innerHTML = `📩 <strong>SMS sent to store</strong><br>${escHtml(text)}`;
   toast.style.display = "block";
   clearTimeout(showSmsToast._t);
   showSmsToast._t = setTimeout(()=>{ toast.style.display = "none"; }, 6000);
 }
-document.getElementById("storeInboxBtn").onclick = async ()=>{
+// Escape anything that came from a customer before putting it in the page.
+function escHtml(v){
+  return String(v == null ? "" : v).replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function renderStoreInboxLogin(el, message){
+  el.innerHTML = `
+    <div class="small-note" style="margin-bottom:10px;">Store staff only. Enter the staff key to view incoming orders.</div>
+    ${message ? `<div class="empty-note" style="color:#b3261e;">${escHtml(message)}</div>` : ""}
+    <div class="field"><label>Staff key</label><input id="staffKeyInput" type="password" autocomplete="off" placeholder="Staff key"></div>
+    <button class="btn-primary" id="staffKeySubmit">View orders</button>`;
+  const submit = async ()=>{
+    const key = document.getElementById("staffKeyInput").value;
+    try{
+      await apiPost("/api/store/login", { key });
+      loadStoreInbox();
+    }catch(err){
+      renderStoreInboxLogin(el, err.error || "Could not sign in.");
+    }
+  };
+  document.getElementById("staffKeySubmit").onclick = submit;
+  document.getElementById("staffKeyInput").onkeydown = e=>{ if(e.key==="Enter") submit(); };
+}
+async function loadStoreInbox(){
   const el = document.getElementById("storeInboxList");
   el.innerHTML = `<div class="empty-note">Loading…</div>`;
-  document.getElementById("storeInboxOverlay").classList.add("show");
-  let list = [];
-  try{ list = (await apiGet("/api/store/notifications")).notifications; }catch(e){ /* show empty state below */ }
-  el.innerHTML = list.length===0
-    ? `<div class="empty-note">No orders yet — this fills up as orders come in.</div>`
-    : list.map(m=>`
+  try{
+    const sess = await apiGet("/api/store/session");
+    if(!sess.enabled){
+      el.innerHTML = `<div class="empty-note">The store inbox is turned off on this server.</div>`;
+      return;
+    }
+    if(!sess.staff){ renderStoreInboxLogin(el); return; }
+    const list = (await apiGet("/api/store/notifications")).notifications;
+    el.innerHTML = (list.length===0
+      ? `<div class="empty-note">No orders yet — this fills up as orders come in.</div>`
+      : list.map(m=>`
         <div class="order-hist-item">
-          <div style="opacity:.7;font-size:.78rem;">${new Date(m.date).toLocaleString()}</div>
-          <div style="margin-top:4px;">${m.text}</div>
-        </div>`).join("");
+          <div style="opacity:.7;font-size:.78rem;">${escHtml(new Date(m.date).toLocaleString())}</div>
+          <div style="margin-top:4px;">${escHtml(m.text)}</div>
+        </div>`).join(""))
+      + `<button class="btn-primary" id="staffSignOut" style="margin-top:12px;background:#666;">Sign out of staff view</button>`;
+    document.getElementById("staffSignOut").onclick = async ()=>{
+      try{ await apiPost("/api/store/logout"); }catch(e){}
+      renderStoreInboxLogin(el);
+    };
+  }catch(err){
+    if(err && err.error === "Staff access required."){ renderStoreInboxLogin(el); return; }
+    el.innerHTML = `<div class="empty-note">${escHtml((err && err.error) || "Could not load the inbox.")}</div>`;
+  }
+}
+document.getElementById("storeInboxBtn").onclick = ()=>{
+  document.getElementById("storeInboxOverlay").classList.add("show");
+  loadStoreInbox();
 };
 document.getElementById("closeStoreInbox").onclick = ()=> document.getElementById("storeInboxOverlay").classList.remove("show");
 document.getElementById("storeInboxOverlay").onclick = e=>{ if(e.target===document.getElementById("storeInboxOverlay")) document.getElementById("storeInboxOverlay").classList.remove("show"); };
@@ -583,10 +624,10 @@ function showOtpStep(bank, maskedPhone, orderInfo, paymentDetail){
 }
 function showConfirmation(order){
   const payLine = order.payMethod==="before"
-    ? `Paid ahead via ${order.paymentDetail.type==="card"?"card ending "+order.paymentDetail.last4 : order.paymentDetail.type==="transfer"?"transfer from "+order.paymentDetail.bank : "USSD via "+order.paymentDetail.bank} (simulated).`
+    ? `Paid ahead via ${order.paymentDetail.type==="card"?"card ending "+escHtml(order.paymentDetail.last4) : order.paymentDetail.type==="transfer"?"transfer from "+escHtml(order.paymentDetail.bank) : "USSD via "+escHtml(order.paymentDetail.bank)} (simulated).`
     : "You'll pay the rider on delivery.";
   document.getElementById("confirmText").innerHTML =
-    `Order <strong>${order.id}</strong> for ${money(order.total)} was placed.<br>${payLine}`;
+    `Order <strong>${escHtml(order.id)}</strong> for ${money(order.total)} was placed.<br>${payLine}`;
   document.getElementById("confirmOverlay").classList.add("show");
 }
 document.getElementById("confirmClose").onclick = ()=> document.getElementById("confirmOverlay").classList.remove("show");
@@ -605,11 +646,11 @@ document.getElementById("ordersBtn").onclick = async ()=>{
     : mine.map(o=>`
         <div class="order-hist-item">
           <div style="display:flex;justify-content:space-between;font-weight:600;">
-            <span>${o.id}</span><span>${money(o.total)}</span>
+            <span>${escHtml(o.id)}</span><span>${money(o.total)}</span>
           </div>
           <div style="opacity:.7;font-size:.8rem;">${new Date(o.date).toLocaleString()}</div>
-          <div style="margin-top:4px;">${o.items.map(i=>i.qty+"× "+i.name+(i.note?" — \""+i.note.replace(/</g,"&lt;")+"\"":"")).join(", ")}</div>
-          ${o.note?`<div style="margin-top:4px;">Note: ${o.note.replace(/</g,"&lt;")}</div>`:""}<div style="margin-top:4px;opacity:.8;">${o.status}</div>
+          <div style="margin-top:4px;">${o.items.map(i=>i.qty+"× "+escHtml(i.name)+(i.note?" — \""+escHtml(i.note)+"\"":"")).join(", ")}</div>
+          ${o.note?`<div style="margin-top:4px;">Note: ${escHtml(o.note)}</div>`:""}<div style="margin-top:4px;opacity:.8;">${escHtml(o.status)}</div>
         </div>
       `).join("");
 };

@@ -1,11 +1,8 @@
-# Render Blueprint — deploys the backend (which also serves the frontend)
-# as a Web Service, plus a managed Postgres database for it to use.
+# Render Blueprint: deploys the Python (FastAPI) backend, which also serves
+# the frontend, plus a managed Postgres database.
 #
-# To use this: push this project to a GitHub repo, then in the Render
-# dashboard choose "New +" -> "Blueprint" and point it at the repo. Render
-# reads this file and creates both resources automatically.
-#
-# See README.md for the manual (non-Blueprint) setup steps too.
+# Push this repo to GitHub, then in Render choose New + -> Blueprint and
+# point it at the repo. See README.md for manual setup.
 
 databases:
   - name: fatoke-market-db
@@ -16,17 +13,20 @@ databases:
 services:
   - type: web
     name: fatoke-market
-    runtime: node
+    runtime: python
     plan: free
     rootDir: backend
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: DATABASE_URL
         fromDatabase:
           name: fatoke-market-db
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
-      - key: NODE_VERSION
-        value: 20.11.0
+      - key: STORE_STAFF_KEY
+        generateValue: true
