@@ -217,13 +217,6 @@ def test_unknown_api_route_is_json_404(client):
     assert r.status_code == 404 and r.json() == {"error": "Not found."}
 
 
-def test_frontend_served(client):
-    r = client.get("/")
-    assert r.status_code == 200 and "<html" in r.text.lower()
-    assert client.get("/some/spa/route").status_code == 200
-    assert client.get("/../app/main.py").status_code == 200  # falls back to index, never leaks
-
-
 def test_production_requires_jwt_secret(monkeypatch):
     import importlib
     import sys

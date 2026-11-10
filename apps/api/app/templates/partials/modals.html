@@ -1,101 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Fatoke Market — Grocery Delivery</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<header>
-  <div class="topbar">
-    <div class="logo">Fatoke <span>Market</span></div>
-    <div class="topbar-spacer"></div>
-    <button class="icon-btn" id="accountBtn">👤 <span id="accountLabel">Sign in</span></button>
-    <button class="icon-btn" id="createAcctBtn">📝 Create account</button>
-    <button class="icon-btn" id="logoutBtn" style="display:none;">⎋ Sign out</button>
-    <button class="icon-btn" id="ordersBtn">📦 Orders</button>
-    <button class="icon-btn" id="cartBtn">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
-  </div>
-  <div class="search-row"><div class="wrap"><div class="search"><input id="searchInput" placeholder="Search rice, noodles, drinks..."></div></div></div>
-  <nav class="cats"><div class="wrap" id="catNav"></div></nav>
-</header>
-
-<div class="hero">
-  <div class="hero-bg" role="img" aria-label="Shelves packed with groceries inside a neighbourhood provision store"></div>
-  <div class="wrap hero-flex">
-    <div class="hero-text">
-      <div class="pill">Delivering across Otukpo • Order today, pick your slot</div>
-      <h1>Groceries and snacks, brought to your door</h1>
-      <p>Preorder food staples, drinks and household basics. Pay on delivery, or pay ahead by card, bank transfer or USSD.</p>
-    </div>
-      </div>
-</div>
-
-<main class="wrap">
-  <div class="section-title"><h2 id="sectionHeading">All products</h2></div>
-  <div class="grid" id="productGrid"></div>
-</main>
-
-<button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
-
-<footer>
-  <div class="wrap">
-    Fatoke Market — a demo grocery storefront. Not a live store; no real orders are placed or charged.
-    <span style="opacity:.5;"> · </span>
-    <button id="storeInboxBtn" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;">Store SMS inbox (demo)</button>
-  </div>
-</footer>
-
-<!-- store SMS toast -->
-<div id="smsToast" style="display:none;position:fixed;left:16px;bottom:16px;z-index:80;max-width:320px;background:var(--green-900);color:#fff;border-radius:10px;padding:14px 16px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.85rem;"></div>
-
-<!-- general success toast (e.g. login) -->
-<div id="successToast" style="display:none;position:fixed;top:calc(16px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:80;background:var(--green-700);color:#fff;border-radius:999px;padding:11px 20px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.88rem;font-weight:600;white-space:nowrap;"></div>
-
-<!-- store SMS inbox modal -->
+{# Modal shells. Content for sign in / sign up / orders / store inbox is filled in by HTMX;
+   cart + checkout + card simulation are driven by the TypeScript in apps/web/src. #}
 <div class="modal-overlay" id="storeInboxOverlay">
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h2>Store SMS inbox</h2>
-      <button class="close-x" id="closeStoreInbox">✕</button>
+      <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div class="small-note">This simulates what the store's phone (+234 800 000 0000) would receive by SMS whenever an order comes in. A real deployment sends these through Termii or Africa's Talking from your server, not from the browser.</div>
     <div id="storeInboxList" style="margin-top:10px;"></div>
   </div>
 </div>
 
-<!-- cart drawer -->
 <div class="overlay" id="cartOverlay"></div>
 <aside class="drawer" id="cartDrawer">
   <div class="drawer-head">
     <h2 style="margin:0;font-size:1.05rem;">Your cart</h2>
-    <button class="close-x" id="closeCart">✕</button>
+    <button class="close-x" id="closeCart" type="button">✕</button>
   </div>
   <div class="drawer-body" id="cartBody"></div>
   <div class="drawer-foot" id="cartFoot"></div>
 </aside>
 
-<!-- auth modal -->
 <div class="modal-overlay" id="authOverlay">
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h2>Sign in</h2>
-      <button class="close-x" id="closeAuth">✕</button>
+      <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
-    <div id="authMsg"></div>
-    <div id="quickSignin" style="display:none;">
-      <p id="quickSigninName" style="margin:0 0 12px;font-size:.95rem;"></p>
-      <div class="field"><label>Password</label><input id="quickPass" type="password" placeholder="At least 6 characters"></div>
-      <button class="btn-primary" id="quickSigninBtn">Sign in</button>
-      <button class="btn-ghost" id="notYouBtn">Not you? Use a different account</button>
-    </div>
-    <div id="fullAuthFields">
-      <div class="field"><label>Email</label><input id="authEmail" placeholder="you@example.com"></div>
-      <div class="field"><label>Password</label><input id="authPass" type="password" placeholder="At least 6 characters"></div>
-      <button class="btn-primary" id="authSubmit">Sign in</button>
-      <div class="small-note">New here? Use the "Create account" button in the header instead.</div>
-    </div>
+    <div id="authNotice"></div>
+    <div id="authBody"></div>
   </div>
 </div>
 
@@ -103,16 +36,9 @@
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h2>Create your account</h2>
-      <button class="close-x" id="closeSignup">✕</button>
+      <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
-    <div id="signupMsg"></div>
-    <div class="field"><label>Full name</label><input id="suName" placeholder="e.g. Ada Bello"></div>
-    <div class="field"><label>Phone number</label><input id="suPhone" placeholder="0801 234 5678"></div>
-    <div class="field"><label>Email</label><input id="suEmail" placeholder="you@example.com"></div>
-    <div class="field"><label>Password</label><input id="suPass" type="password" placeholder="At least 6 characters"></div>
-    <div class="field"><label>Confirm password</label><input id="suPassConfirm" type="password" placeholder="Re-enter your password"></div>
-    <button class="btn-primary" id="signupSubmit">Create account</button>
-    <div class="small-note">Already have an account? Use the "Sign in" button in the header instead.</div>
+    <div id="signupBody"></div>
   </div>
 </div>
 
@@ -192,20 +118,17 @@
     <h2 style="text-align:center;">Order placed</h2>
     <p style="text-align:center;font-size:.9rem;opacity:.8;" id="confirmText"></p>
     <button class="btn-primary" id="confirmClose">Done</button>
-    <button class="btn-ghost" id="confirmLogout">Sign out</button>
+    <button class="btn-ghost" id="confirmLogout" type="button" hx-post="/ui/logout" hx-target="#account-area" hx-swap="innerHTML">Sign out</button>
   </div>
 </div>
 
-<!-- orders modal -->
 <div class="modal-overlay" id="ordersOverlay">
   <div class="modal">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h2>Your orders</h2>
-      <button class="close-x" id="closeOrders">✕</button>
+      <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div id="ordersList"></div>
-    <button class="btn-ghost" id="ordersLogout">Sign out</button>
+    <button class="btn-ghost" id="ordersLogout" type="button" hx-post="/ui/logout" hx-target="#account-area" hx-swap="innerHTML">Sign out</button>
   </div>
-</div><script src="app.js"></script>
-</body>
-</html>
+</div>

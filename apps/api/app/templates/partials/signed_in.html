@@ -1,0 +1,5 @@
+{# Returned after a successful sign in or sign up. The TypeScript listens for
+   the "signed-in" event, closes the modal and refreshes the header. #}
+<div class="msg ok" data-signed-in data-email="{{ signed_in_email }}" data-first-name="{{ user.name.split(' ')[0] }}">
+  Welcome, {{ user.name.split(' ')[0] }}!
+</div>

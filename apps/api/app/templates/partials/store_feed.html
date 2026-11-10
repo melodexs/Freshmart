@@ -1,0 +1,12 @@
+{% if not notifications %}
+  <div class="empty-note">No orders yet — this fills up as orders come in.</div>
+{% else %}
+  {% for m in notifications %}
+  <div class="order-hist-item">
+    <div style="opacity:.7;font-size:.78rem;">{{ m.date|local_time }}</div>
+    <div style="margin-top:4px;">{{ m.text }}</div>
+  </div>
+  {% endfor %}
+{% endif %}
+<button class="btn-primary" style="margin-top:12px;background:#666;" type="button"
+        hx-post="/api/store/ui/logout" hx-target="#storeInboxList" hx-swap="innerHTML">Sign out of staff view</button>

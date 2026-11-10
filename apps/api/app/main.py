@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -15,6 +15,7 @@ from .routes import auth as auth_routes
 from .routes import orders as order_routes
 from .routes import products as product_routes
 from .routes import store as store_routes
+from .routes import ui as ui_routes
 
 
 @asynccontextmanager
@@ -54,6 +55,7 @@ app.include_router(auth_routes.router, prefix="/api/auth")
 app.include_router(product_routes.router, prefix="/api/products")
 app.include_router(order_routes.router, prefix="/api/orders")
 app.include_router(store_routes.router, prefix="/api/store")
+app.include_router(ui_routes.router)
 
 
 @app.get("/api/health")
@@ -66,14 +68,6 @@ async def api_not_found(rest: str):
     raise HTTPException(status_code=404, detail="Not found.")
 
 
-# Serve the frontend from the same server (no CORS needed), SPA-style.
-if config.FRONTEND_DIR.is_dir():
-    app.mount("/assets-static", StaticFiles(directory=config.FRONTEND_DIR), name="static")
-
-    @app.get("/{path:path}")
-    async def frontend(path: str):
-        root = config.FRONTEND_DIR.resolve()
-        target = (root / path).resolve()
-        if path and target.is_file() and root in target.parents:
-            return FileResponse(target)
-        return FileResponse(root / "index.html")
+# Static assets (CSS, compiled TypeScript, HTMX). Pages themselves are rendered by routes/ui.py.
+if config.STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")

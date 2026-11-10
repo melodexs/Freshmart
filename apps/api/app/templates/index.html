@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block body %}
+<header>
+  <div class="topbar">
+    <div class="logo">Fatoke <span>Market</span></div>
+    <div class="topbar-spacer"></div>
+    <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
+    <button class="icon-btn" id="ordersBtn" type="button"
+            hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML"
+            data-open-modal="ordersOverlay">📦 Orders</button>
+    <button class="icon-btn" id="cartBtn" type="button">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
+  </div>
+  <div class="search-row"><div class="wrap"><div class="search">
+    <input id="searchInput" name="q" placeholder="Search rice, noodles, drinks..." autocomplete="off"
+           hx-get="/ui/products" hx-trigger="input changed delay:200ms, search"
+           hx-target="#catalog" hx-include="#activeCat">
+    <input type="hidden" id="activeCat" name="cat" value="All">
+  </div></div></div>
+  <nav class="cats"><div class="wrap" id="catNav">
+    {% for c in categories %}
+    <button type="button" class="{{ 'active' if c == active }}" hx-get="/ui/products" hx-vals='{"cat": {{ c|tojson|forceescape }}}'
+            hx-include="#searchInput" hx-target="#catalog">{{ c }}</button>
+    {% endfor %}
+  </div></nav>
+</header>
+
+<div class="hero">
+  <div class="hero-bg" role="img" aria-label="Shelves packed with groceries inside a neighbourhood provision store"></div>
+  <div class="wrap hero-flex">
+    <div class="hero-text">
+      <div class="pill">Delivering across Otukpo • Order today, pick your slot</div>
+      <h1>Groceries and snacks, brought to your door</h1>
+      <p>Preorder food staples, drinks and household basics. Pay on delivery, or pay ahead by card, bank transfer or USSD.</p>
+    </div>
+  </div>
+</div>
+
+<main class="wrap" id="catalog" hx-get="/ui/products" hx-trigger="load" hx-swap="innerHTML">
+  <div class="empty-note">Loading products…</div>
+</main>
+
+<button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
+
+<footer>
+  <div class="wrap">
+    Fatoke Market — a demo grocery storefront. Not a live store; no real orders are placed or charged.
+    <span style="opacity:.5;"> · </span>
+    <button id="storeInboxBtn" type="button" class="link-btn"
+            hx-get="/api/store/ui" hx-target="#storeInboxList" hx-swap="innerHTML"
+            data-open-modal="storeInboxOverlay">Store SMS inbox (demo)</button>
+  </div>
+</footer>
+
+<div id="smsToast" class="toast toast-sms" role="status" style="display:none;"></div>
+<div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
+
+{% include "partials/modals.html" %}
+<script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee}|tojson }}</script>
+{% endblock %}

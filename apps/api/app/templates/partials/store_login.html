@@ -1,0 +1,6 @@
+<div class="small-note" style="margin-bottom:10px;">Store staff only. Enter the staff key to view incoming orders.</div>
+{% if message %}<div class="msg {{ message[0] }}">{{ message[1] }}</div>{% endif %}
+<form hx-post="/api/store/ui/login" hx-target="#storeInboxList" hx-swap="innerHTML">
+  <div class="field"><label>Staff key</label><input name="key" type="password" autocomplete="off" placeholder="Staff key" required></div>
+  <button class="btn-primary" type="submit">View orders</button>
+</form>
