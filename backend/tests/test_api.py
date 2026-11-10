@@ -128,6 +128,40 @@ def test_store_feed_disabled_in_production_without_key(client, monkeypatch):
     from app import config
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     assert client.get("/api/store/notifications").status_code == 403
+    assert client.post("/api/store/login", json={"key": "x"}).status_code == 403
+    assert client.get("/api/store/session").json() == {"enabled": False, "staff": False}
+
+
+def test_staff_login_flow(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    assert client.get("/api/store/session").json() == {"enabled": True, "staff": False}
+    bad = client.post("/api/store/login", json={"key": "nope"})
+    assert bad.status_code == 401 and bad.json()["error"]
+    assert client.get("/api/store/notifications").status_code == 401
+    ok = client.post("/api/store/login", json={"key": "s3cret"})
+    assert ok.status_code == 200
+    sc = ok.headers["set-cookie"].lower()
+    assert "httponly" in sc and "samesite=strict" in sc and "path=/api/store" in sc
+    assert client.get("/api/store/session").json() == {"enabled": True, "staff": True}
+    assert client.get("/api/store/notifications").status_code == 200
+    client.post("/api/store/logout")
+    assert client.get("/api/store/notifications").status_code == 401
+
+
+def test_customer_cookie_is_not_staff(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
+    signup(client)
+    assert client.get("/api/store/notifications").status_code == 401
+
+
+def test_staff_login_rate_limited(client, monkeypatch):
+    from app import config
+    monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
+    codes = [client.post("/api/store/login", json={"key": "guess%d" % i}).status_code for i in range(8)]
+    assert codes[:5] == [401] * 5 and 429 in codes
 
 
 def test_login_rate_limit(client):

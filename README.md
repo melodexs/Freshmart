@@ -146,9 +146,15 @@ deployment config change.
   reset on restart; set it in `.env` to keep them.
 - The session cookie is marked `secure` automatically on Render or when
   `ENV=production`. Plain-HTTP local development still works.
-- `GET /api/store/notifications` is protected by the `X-Staff-Key` header
-  (set `STORE_STAFF_KEY`). In production it is disabled if no key is set.
-  It is open only in local development.
+- **Store inbox (staff only).** The footer's "Store SMS inbox" now asks for a
+  staff key. Set `STORE_STAFF_KEY` (Render's Blueprint generates one: open the
+  service's **Environment** tab to read it). Signing in sets a 12 hour
+  `httpOnly`, `SameSite=Strict` cookie, so the key is never stored in
+  JavaScript. Scripts can instead send `X-Staff-Key: <key>` to
+  `GET /api/store/notifications`. In production the inbox is disabled if no key
+  is set; it is open only in local development.
+- Customer-supplied text (addresses, notes) is HTML-escaped everywhere the UI
+  renders it, so it cannot inject scripts into the customer or staff views.
 - Login, signup and email lookup are rate limited per IP (in memory, so
   per process; use a shared store like Redis if you run several instances).
 - The local JSON-file database (used only when `DATABASE_URL` isn't set)

@@ -55,17 +55,63 @@ def require_auth(request: Request) -> dict:
     return user
 
 
-def require_staff(request: Request) -> None:
-    """Protects the store's order feed with a shared staff key.
+STAFF_COOKIE = "fm_staff"
+STAFF_TTL_SECONDS = 12 * 60 * 60
 
-    Send it as the `X-Staff-Key` header. Disabled entirely when
-    STORE_STAFF_KEY is not configured and we are in production.
-    """
+
+def staff_enabled() -> bool:
+    """Staff access is on when a key is set, or in local dev (open)."""
+    return bool(config.STORE_STAFF_KEY) or not config.IS_PRODUCTION
+
+
+def check_staff_key(supplied: str) -> bool:
     key = config.STORE_STAFF_KEY
     if not key:
-        if config.IS_PRODUCTION:
-            raise HTTPException(status_code=403, detail="Store feed is disabled.")
-        return  # open in local development only
-    supplied = request.headers.get("x-staff-key", "")
-    if not hmac.compare_digest(supplied.encode(), key.encode()):
+        return not config.IS_PRODUCTION
+    return hmac.compare_digest(supplied.encode(), key.encode())
+
+
+def sign_staff_token() -> str:
+    now = int(time.time())
+    return jwt.encode(
+        {"role": "staff", "iat": now, "exp": now + STAFF_TTL_SECONDS},
+        config.JWT_SECRET, algorithm="HS256",
+    )
+
+
+def set_staff_cookie(response: Response) -> None:
+    response.set_cookie(
+        STAFF_COOKIE, sign_staff_token(), max_age=STAFF_TTL_SECONDS,
+        httponly=True, samesite="strict", secure=config.COOKIE_SECURE, path="/api/store",
+    )
+
+
+def clear_staff_cookie(response: Response) -> None:
+    response.delete_cookie(STAFF_COOKIE, path="/api/store")
+
+
+def is_staff(request: Request) -> bool:
+    if not config.STORE_STAFF_KEY and not config.IS_PRODUCTION:
+        return True  # open in local development only
+    # Header still works for scripts/curl.
+    if check_staff_key(request.headers.get("x-staff-key", "")) and config.STORE_STAFF_KEY:
+        return True
+    token = request.cookies.get(STAFF_COOKIE)
+    if not token:
+        return False
+    try:
+        return jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"]).get("role") == "staff"
+    except jwt.PyJWTError:
+        return False
+
+
+def require_staff(request: Request) -> None:
+    """Protects the store's order feed (customer addresses and phones).
+
+    Accepts a staff session cookie (from POST /api/store/login) or the
+    X-Staff-Key header. Disabled in production if STORE_STAFF_KEY is unset.
+    """
+    if not staff_enabled():
+        raise HTTPException(status_code=403, detail="Store feed is disabled.")
+    if not is_staff(request):
         raise HTTPException(status_code=401, detail="Staff access required.")
