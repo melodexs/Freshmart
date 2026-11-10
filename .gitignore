@@ -2,6 +2,9 @@ node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 .venv/
+.v/
 .env
 *.tmp
+.DS_Store

@@ -2,16 +2,17 @@
 
 Routes call these functions only, so swapping stores never touches them.
 """
+
 from __future__ import annotations
 
 from . import config
 
 if config.USE_POSTGRES:
-    from .db_postgres import *  # noqa: F401,F403
     from . import db_postgres as _impl
+    from .db_postgres import *  # noqa: F401,F403
 else:
-    from .db_file import *  # noqa: F401,F403
     from . import db_file as _impl
+    from .db_file import *  # noqa: F401,F403
 
 init = _impl.init
 get_user_by_email = _impl.get_user_by_email

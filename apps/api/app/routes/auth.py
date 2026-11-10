@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import bcrypt
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 

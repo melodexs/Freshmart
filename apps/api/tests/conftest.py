@@ -1,5 +1,3 @@
-import importlib
-import os
 import sys
 from pathlib import Path
 
@@ -20,8 +18,10 @@ def client(tmp_path, monkeypatch):
     for m in [m for m in sys.modules if m == "app" or m.startswith("app.")]:
         del sys.modules[m]
     from fastapi.testclient import TestClient
+
     from app import ratelimit
     from app.main import app
+
     ratelimit.reset()
     with TestClient(app) as c:
         yield c
