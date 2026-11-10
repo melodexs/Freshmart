@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fatoke Market — Grocery Delivery</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div class="logo">Fatoke <span>Market</span></div>
+    <div class="topbar-spacer"></div>
+    <button class="icon-btn" id="accountBtn">👤 <span id="accountLabel">Sign in</span></button>
+    <button class="icon-btn" id="createAcctBtn">📝 Create account</button>
+    <button class="icon-btn" id="logoutBtn" style="display:none;">⎋ Sign out</button>
+    <button class="icon-btn" id="ordersBtn">📦 Orders</button>
+    <button class="icon-btn" id="cartBtn">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
+  </div>
+  <div class="search-row"><div class="wrap"><div class="search"><input id="searchInput" placeholder="Search rice, noodles, drinks..."></div></div></div>
+  <nav class="cats"><div class="wrap" id="catNav"></div></nav>
+</header>
+
+<div class="hero">
+  <div class="hero-bg" role="img" aria-label="Shelves packed with groceries inside a neighbourhood provision store"></div>
+  <div class="wrap hero-flex">
+    <div class="hero-text">
+      <div class="pill">Delivering across Otukpo • Order today, pick your slot</div>
+      <h1>Groceries and snacks, brought to your door</h1>
+      <p>Preorder food staples, drinks and household basics. Pay on delivery, or pay ahead by card, bank transfer or USSD.</p>
+    </div>
+      </div>
+</div>
+
+<main class="wrap">
+  <div class="section-title"><h2 id="sectionHeading">All products</h2></div>
+  <div class="grid" id="productGrid"></div>
+</main>
+
+<button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
+
+<footer>
+  <div class="wrap">
+    Fatoke Market — a demo grocery storefront. Not a live store; no real orders are placed or charged.
+    <span style="opacity:.5;"> · </span>
+    <button id="storeInboxBtn" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;">Store SMS inbox (demo)</button>
+  </div>
+</footer>
+
+<!-- store SMS toast -->
+<div id="smsToast" style="display:none;position:fixed;left:16px;bottom:16px;z-index:80;max-width:320px;background:var(--green-900);color:#fff;border-radius:10px;padding:14px 16px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.85rem;"></div>
+
+<!-- general success toast (e.g. login) -->
+<div id="successToast" style="display:none;position:fixed;top:calc(16px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:80;background:var(--green-700);color:#fff;border-radius:999px;padding:11px 20px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.88rem;font-weight:600;white-space:nowrap;"></div>
+
+<!-- store SMS inbox modal -->
+<div class="modal-overlay" id="storeInboxOverlay">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Store SMS inbox</h2>
+      <button class="close-x" id="closeStoreInbox">✕</button>
+    </div>
+    <div class="small-note">This simulates what the store's phone (+234 800 000 0000) would receive by SMS whenever an order comes in. A real deployment sends these through Termii or Africa's Talking from your server, not from the browser.</div>
+    <div id="storeInboxList" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- cart drawer -->
+<div class="overlay" id="cartOverlay"></div>
+<aside class="drawer" id="cartDrawer">
+  <div class="drawer-head">
+    <h2 style="margin:0;font-size:1.05rem;">Your cart</h2>
+    <button class="close-x" id="closeCart">✕</button>
+  </div>
+  <div class="drawer-body" id="cartBody"></div>
+  <div class="drawer-foot" id="cartFoot"></div>
+</aside>
+
+<!-- auth modal -->
+<div class="modal-overlay" id="authOverlay">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Sign in</h2>
+      <button class="close-x" id="closeAuth">✕</button>
+    </div>
+    <div id="authMsg"></div>
+    <div id="quickSignin" style="display:none;">
+      <p id="quickSigninName" style="margin:0 0 12px;font-size:.95rem;"></p>
+      <div class="field"><label>Password</label><input id="quickPass" type="password" placeholder="At least 6 characters"></div>
+      <button class="btn-primary" id="quickSigninBtn">Sign in</button>
+      <button class="btn-ghost" id="notYouBtn">Not you? Use a different account</button>
+    </div>
+    <div id="fullAuthFields">
+      <div class="field"><label>Email</label><input id="authEmail" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input id="authPass" type="password" placeholder="At least 6 characters"></div>
+      <button class="btn-primary" id="authSubmit">Sign in</button>
+      <div class="small-note">New here? Use the "Create account" button in the header instead.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="signupOverlay">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Create your account</h2>
+      <button class="close-x" id="closeSignup">✕</button>
+    </div>
+    <div id="signupMsg"></div>
+    <div class="field"><label>Full name</label><input id="suName" placeholder="e.g. Ada Bello"></div>
+    <div class="field"><label>Phone number</label><input id="suPhone" placeholder="0801 234 5678"></div>
+    <div class="field"><label>Email</label><input id="suEmail" placeholder="you@example.com"></div>
+    <div class="field"><label>Password</label><input id="suPass" type="password" placeholder="At least 6 characters"></div>
+    <div class="field"><label>Confirm password</label><input id="suPassConfirm" type="password" placeholder="Re-enter your password"></div>
+    <button class="btn-primary" id="signupSubmit">Create account</button>
+    <div class="small-note">Already have an account? Use the "Sign in" button in the header instead.</div>
+  </div>
+</div>
+
+<!-- checkout modal -->
+<div class="modal-overlay" id="checkoutOverlay">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Checkout</h2>
+      <button class="close-x" id="closeCheckout">✕</button>
+    </div>
+    <div class="tab-row">
+      <button id="tabReview" class="active">1. Review order</button>
+      <button id="tabPlace">2. Place order</button>
+    </div>
+    <div id="stepReview"></div>
+    <div id="stepPlace" style="display:none;">
+    <div id="checkoutMsg"></div>
+    <div class="field"><label>Delivery address</label><input id="coAddress" placeholder="House no., street, area"></div>
+    <div class="field"><label>Delivery town</label>
+      <select id="coCity"><option>Otukpo, Benue State</option></select>
+    </div>
+    <div class="field"><label>Phone number</label><input id="coPhone" placeholder="0801 234 5678"></div>
+
+    <label style="display:block;font-size:.85rem;font-weight:600;margin:14px 0 8px;">Payment method</label>
+    <div class="pay-option" data-val="delivery" id="optDelivery">
+      <input type="radio" name="pay" value="delivery">
+      <div><div class="t">Pay on delivery</div><div class="d">Pay cash or by card/transfer to the rider when your order arrives.</div></div>
+    </div>
+    <div class="pay-option" data-val="before" id="optBefore">
+      <input type="radio" name="pay" value="before">
+      <div><div class="t">Pay before delivery</div><div class="d">Card, bank transfer or USSD — order is confirmed once payment clears.</div></div>
+    </div>
+
+    <div id="beforePayPanel" style="display:none;">
+      <div class="tab-row" style="margin-top:6px;">
+        <button id="payTabCard" class="active">Card</button>
+        <button id="payTabTransfer">Bank transfer</button>
+        <button id="payTabUssd">USSD</button>
+      </div>
+      <div id="payCardPanel">
+        <div class="field"><label>Card number</label><input id="cardNumber" placeholder="4111 1111 1111 1111"></div>
+        <div style="display:flex;gap:10px;">
+          <div class="field" style="flex:1;"><label>Expiry</label><input id="cardExpiry" placeholder="MM/YY"></div>
+          <div class="field" style="flex:1;"><label>CVV</label><input id="cardCvv" placeholder="123"></div>
+        </div>
+      </div>
+      <div id="payTransferPanel" style="display:none;">
+        <label style="display:block;font-size:.82rem;margin-bottom:6px;opacity:.8;">Select your bank or microfinance bank</label>
+        <div class="bank-list" id="bankList"></div>
+      </div>
+      <div id="payUssdPanel" style="display:none;">
+        <div class="field"><label>Select your bank for a USSD code</label>
+          <select id="ussdBank">
+            <option>GTBank</option><option>Access Bank</option><option>Zenith Bank</option><option>UBA</option><option>First Bank</option>
+          </select>
+        </div>
+        <div class="small-note" id="ussdCodeNote"></div>
+      </div>
+      <div class="small-note">This demo simulates the payment step. A real deployment routes this through a licensed Nigerian payment aggregator (e.g. Paystack or Flutterwave), which is what actually connects the checkout to commercial banks and microfinance banks — no card, transfer or account details here are sent anywhere or charged.</div>
+    </div>
+
+    <button class="btn-primary" id="placeOrderBtn">Place order — ₦0</button>
+    <button class="btn-ghost" id="backToReview">Back to review</button>
+    </div>
+  </div>
+</div>
+
+<!-- card payment processing modal -->
+<div class="modal-overlay" id="processingOverlay">
+  <div class="modal" id="processingModal"></div>
+</div>
+
+<!-- confirmation modal -->
+<div class="modal-overlay" id="confirmOverlay">
+  <div class="modal">
+    <div class="confirm-icon">✅</div>
+    <h2 style="text-align:center;">Order placed</h2>
+    <p style="text-align:center;font-size:.9rem;opacity:.8;" id="confirmText"></p>
+    <button class="btn-primary" id="confirmClose">Done</button>
+    <button class="btn-ghost" id="confirmLogout">Sign out</button>
+  </div>
+</div>
+
+<!-- orders modal -->
+<div class="modal-overlay" id="ordersOverlay">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Your orders</h2>
+      <button class="close-x" id="closeOrders">✕</button>
+    </div>
+    <div id="ordersList"></div>
+    <button class="btn-ghost" id="ordersLogout">Sign out</button>
+  </div>
+</div><script src="app.js"></script>
+</body>
+</html>

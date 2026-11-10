@@ -1,0 +1,32 @@
+# Render Blueprint — deploys the backend (which also serves the frontend)
+# as a Web Service, plus a managed Postgres database for it to use.
+#
+# To use this: push this project to a GitHub repo, then in the Render
+# dashboard choose "New +" -> "Blueprint" and point it at the repo. Render
+# reads this file and creates both resources automatically.
+#
+# See README.md for the manual (non-Blueprint) setup steps too.
+
+databases:
+  - name: fatoke-market-db
+    plan: free
+    databaseName: fatoke_market
+    user: fatoke_market
+
+services:
+  - type: web
+    name: fatoke-market
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fatoke-market-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_VERSION
+        value: 20.11.0
