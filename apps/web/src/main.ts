@@ -157,6 +157,19 @@ function showOrderPlaced(order: PlacedOrder): void {
   show($("confirmOverlay"));
 }
 
+function initBackToTop(): void {
+  const btn = $("backToTop");
+  const SHOW_AFTER_PX = 600;
+  window.addEventListener(
+    "scroll",
+    () => {
+      btn.hidden = window.scrollY < SHOW_AFTER_PX;
+    },
+    { passive: true },
+  );
+  btn.onclick = () => window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function init(): void {
   const cfg = $maybe("app-config")?.textContent;
   if (cfg) {
@@ -165,6 +178,7 @@ function init(): void {
   }
   syncSignedIn();
   initModals();
+  initBackToTop();
   void initCart();
   initCheckout();
   initAuthEvents();
