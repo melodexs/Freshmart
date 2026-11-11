@@ -254,3 +254,5 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .info-strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:18px auto;}
 .info-item{background:var(--cream); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; display:flex; flex-direction:column; gap:4px; font-size:.88rem;}
 .info-item span{opacity:.75;}
+
+.status-summary{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}

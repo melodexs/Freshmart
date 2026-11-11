@@ -1,4 +1,9 @@
 {% if notice %}<div class="msg {{ notice[0] }}">{{ notice[1] }}</div>{% endif %}
+{% if orders %}
+<div class="status-summary" aria-label="Orders by status">
+  {% for st, n in counts.items() if n %}<span class="status-pill">{{ st }}: {{ n }}</span>{% endfor %}
+</div>
+{% endif %}
 {% if not orders %}
   <div class="empty-note">No orders yet. This fills up as orders come in.</div>
 {% else %}

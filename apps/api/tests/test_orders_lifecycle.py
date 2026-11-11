@@ -215,3 +215,16 @@ def test_track_is_rate_limited(client):
         for i in range(14)
     ]
     assert 429 in codes
+
+
+def test_staff_feed_summarises_orders_by_status(client, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
+    signup(client)
+    place(client)
+    place(client)
+    client.post("/api/store/ui/login", data={"key": "s3cret"})
+    html = client.get("/api/store/ui").text
+    assert 'aria-label="Orders by status"' in html
+    assert "Awaiting delivery — pay on arrival: 2" in html
