@@ -16,6 +16,7 @@ from .routes import orders as order_routes
 from .routes import products as product_routes
 from .routes import store as store_routes
 from .routes import ui as ui_routes
+from .templating import templates
 
 
 @asynccontextmanager
@@ -34,6 +35,20 @@ app = FastAPI(
 # Keep the {"error": "..."} shape the frontend already expects.
 @app.exception_handler(StarletteHTTPException)
 async def http_exc(request: Request, exc: StarletteHTTPException):
+    # Browsers asking for a page get a friendly page; the API keeps returning JSON.
+    path = request.url.path
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if exc.status_code == 404 and wants_html and not path.startswith(("/api/", "/ui/")):
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "code": 404,
+                "heading": "We could not find that page",
+                "message": "The link may be old or mistyped. Head back to the shop to keep browsing.",
+            },
+            status_code=404,
+        )
     return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
 
 

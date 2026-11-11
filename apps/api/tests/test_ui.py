@@ -239,3 +239,10 @@ def test_sitemap_lists_the_home_page(client):
     r = client.get("/sitemap.xml")
     assert r.status_code == 200 and "xml" in r.headers["content-type"]
     assert "<loc>" in r.text and "urlset" in r.text
+
+
+def test_browser_404_is_a_friendly_page_but_api_stays_json(client):
+    page = client.get("/no-such-page", headers={"accept": "text/html"})
+    assert page.status_code == 404 and "Back to the shop" in page.text
+    api = client.get("/api/nope", headers={"accept": "text/html"})
+    assert api.status_code == 404 and api.json() == {"error": "Not found."}
