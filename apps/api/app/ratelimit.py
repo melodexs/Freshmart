@@ -21,8 +21,12 @@ def limit(request: Request, bucket: str, max_hits: int, window_s: int) -> None:
     while q and now - q[0] > window_s:
         q.popleft()
     if len(q) >= max_hits:
+        # Tell well-behaved clients exactly when the oldest hit leaves the window.
+        wait = max(1, int(window_s - (now - q[0])) + 1)
         raise HTTPException(
-            status_code=429, detail="Too many attempts. Please wait a minute and try again."
+            status_code=429,
+            detail="Too many attempts. Please wait a minute and try again.",
+            headers={"Retry-After": str(wait)},
         )
     q.append(now)
 
