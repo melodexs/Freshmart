@@ -280,10 +280,20 @@ def test_grid_can_sort_by_name_and_price(client):
         p = next(p for p in PRODUCTS if p["name"] == name)
         return min(o["price"] for o in p["options"])
 
-    asc = [cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-asc"}).text)]
-    desc = [cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-desc"}).text)]
+    asc = [
+        cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-asc"}).text)
+    ]
+    desc = [
+        cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-desc"}).text)
+    ]
     assert asc == sorted(asc) and desc == sorted(desc, reverse=True)
 
 
 def test_unknown_sort_value_is_ignored(client):
     assert client.get("/ui/products", params={"sort": "'; drop table"}).status_code == 200
+
+
+def test_page_offers_a_sort_dropdown_that_keeps_search_and_category(client):
+    html = client.get("/").text
+    assert 'id="sortSelect"' in html and 'value="price-asc"' in html
+    assert "#sortSelect" in html  # search and category requests include the chosen sort

@@ -245,3 +245,5 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 
 .section-title{display:flex; align-items:baseline; gap:10px;}
 .result-count{font-size:.8rem; opacity:.6;}
+
+.sort-select{margin-left:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:.85rem;}
