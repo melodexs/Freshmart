@@ -245,3 +245,15 @@ def test_static_is_cacheable_but_pages_and_api_are_not(client):
     assert "max-age=86400" in client.get("/static/styles.css").headers["cache-control"]
     assert client.get("/").headers["cache-control"] == "no-store"
     assert client.get("/api/health").headers["cache-control"] == "no-store"
+
+
+def test_ready_endpoint_checks_the_data_store(client, monkeypatch):
+    assert client.get("/api/ready").json() == {"ok": True}
+    from app import db
+
+    async def boom():
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(db, "get_all_orders", boom)
+    r = client.get("/api/ready")
+    assert r.status_code == 503 and r.json()["ok"] is False
