@@ -105,6 +105,16 @@ async def health():
     return {"ok": True}
 
 
+@app.get("/api/ready")
+async def ready():
+    """Readiness: confirms the data store answers, not just that the process is up."""
+    try:
+        await db.get_all_orders()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Data store unavailable."}, status_code=503)
+    return {"ok": True}
+
+
 @app.get("/robots.txt", include_in_schema=False)
 async def robots(request: Request):
     base = str(request.base_url).rstrip("/")
