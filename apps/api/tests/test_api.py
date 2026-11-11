@@ -292,3 +292,13 @@ def test_order_rejects_invalid_phone_and_stores_the_normalised_one(client):
     assert bad.status_code == 400 and "valid Nigerian mobile" in bad.json()["error"]
     ok = client.post("/api/orders", json={**body, "phone": "+234 801 234 5678"})
     assert ok.status_code == 200 and ok.json()["order"]["phone"] == "08012345678"
+
+
+def test_rate_limited_responses_say_when_to_retry(client):
+    last = None
+    for i in range(14):
+        last = client.post("/api/auth/login", json={"email": "x@y.com", "password": f"p{i}"})
+        if last.status_code == 429:
+            break
+    assert last.status_code == 429
+    assert 1 <= int(last.headers["retry-after"]) <= 61
