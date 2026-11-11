@@ -11,7 +11,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 
-from .. import auth, db, products, ratelimit
+from .. import auth, db, order_status, products, ratelimit
 from ..templating import templates
 
 router = APIRouter()
@@ -183,7 +183,7 @@ async def store_inbox(request: Request):
         return _render(request, "partials/store_off.html")
     if not auth.is_staff(request):
         return _render(request, "partials/store_login.html", message=None)
-    return _render(request, "partials/store_feed.html", notifications=await db.get_store_sms())
+    return await _store_feed(request)
 
 
 @router.post("/api/store/ui/login", response_class=HTMLResponse)
@@ -197,7 +197,7 @@ async def store_login(request: Request, key: str = Form("")):
             "partials/store_login.html",
             message=("error", "That staff key is not correct."),
         )
-    resp = _render(request, "partials/store_feed.html", notifications=await db.get_store_sms())
+    resp = await _store_feed(request)
     auth.set_staff_cookie(resp)
     return resp
 
@@ -207,3 +207,113 @@ async def store_logout(request: Request):
     resp = _render(request, "partials/store_login.html", message=None)
     auth.clear_staff_cookie(resp)
     return resp
+
+
+async def _store_feed(request: Request, notice: tuple[str, str] | None = None) -> HTMLResponse:
+    orders = await db.get_all_orders()
+    return _render(
+        request,
+        "partials/store_feed.html",
+        orders=orders,
+        options=order_status.STAFF_NEXT,
+        notice=notice,
+    )
+
+
+@router.post("/api/store/ui/orders/{order_id}/status", response_class=HTMLResponse)
+async def staff_set_status(request: Request, order_id: str, status: str = Form("")):
+    """Staff moves an order along its lifecycle. Only allowed moves are accepted."""
+    if not auth.staff_enabled():
+        return _render(request, "partials/store_off.html")
+    if not auth.is_staff(request):
+        return _render(request, "partials/store_login.html", status=401, message=None)
+    order = await db.get_order(order_id)
+    if not order:
+        return await _store_feed(request, ("error", "That order was not found."))
+    if not order_status.staff_may_move(order["status"], status):
+        return await _store_feed(
+            request,
+            ("error", f'Order {order_id} cannot move from "{order["status"]}" to "{status}".'),
+        )
+    # Atomic: only applies if the status is still what staff were looking at.
+    ok = await db.update_order_status(order_id, status, allowed_from=[order["status"]])
+    if not ok:
+        return await _store_feed(
+            request, ("error", f"Order {order_id} was just changed. Please review it again.")
+        )
+    note = order_status.refund_note(order) if status == order_status.CANCELLED else None
+    msg = f"Order {order_id} is now: {status}." + (f" {note}" if note else "")
+    return await _store_feed(request, ("ok", msg))
+
+
+@router.post("/ui/orders/{order_id}/cancel", response_class=HTMLResponse)
+async def customer_cancel(request: Request, order_id: str):
+    """A signed-in customer cancels their own order, only before it leaves the store."""
+    user = auth.current_user(request)
+    if not user:
+        return _render(
+            request,
+            "partials/need_signin.html",
+            status=401,
+            reason="Sign in to manage your orders.",
+        )
+    order = await db.get_order(order_id)
+    # Same answer for "not found" and "someone else's order" so IDs cannot be probed.
+    if not order or order.get("user") != user["email"]:
+        orders = await db.get_orders_for_user(user["email"])
+        return _render(
+            request,
+            "partials/orders.html",
+            orders=orders,
+            notice=("error", "That order was not found."),
+        )
+    ok = False
+    if order_status.customer_may_cancel(order["status"]):
+        ok = await db.update_order_status(
+            order_id, order_status.CANCELLED, allowed_from=order_status.CUSTOMER_CAN_CANCEL_FROM
+        )
+    orders = await db.get_orders_for_user(user["email"])
+    if not ok:
+        notice = (
+            "error",
+            f"Order {order_id} can no longer be cancelled because it is already on its way.",
+        )
+    elif order.get("payMethod") == "before":
+        notice = (
+            "ok",
+            f"Order {order_id} was cancelled. The store will contact you about your refund.",
+        )
+    else:
+        notice = ("ok", f"Order {order_id} was cancelled.")
+    return _render(request, "partials/orders.html", orders=orders, notice=notice)
+
+
+@router.get("/ui/track", response_class=HTMLResponse)
+async def track_form(request: Request):
+    return _render(request, "partials/track.html", result=None, message=None)
+
+
+@router.post("/ui/track", response_class=HTMLResponse)
+async def track_lookup(request: Request, order_id: str = Form(""), phone: str = Form("")):
+    """Find an order with its reference AND the phone number used on it.
+
+    Both must match, so a guessed reference alone reveals nothing.
+    """
+    ratelimit.limit(request, "track", 10, 60)
+    ref = order_id.strip().upper()[:20]
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    not_found = "We could not find an order with that reference and phone number."
+    if not ref or len(digits) < 6:
+        return _render(request, "partials/track.html", result=None, message=("error", not_found))
+    order = await db.get_order(ref)
+    stored = "".join(ch for ch in str(order.get("phone", "")) if ch.isdigit()) if order else ""
+    # Compare the last 9 digits so 0803... and +234803... both match.
+    if not order or stored[-9:] != digits[-9:]:
+        return _render(request, "partials/track.html", result=None, message=("error", not_found))
+    return _render(
+        request,
+        "partials/track.html",
+        result=order,
+        message=None,
+        progress=order_status.progress(order["status"]),
+    )

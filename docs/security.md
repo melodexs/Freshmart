@@ -11,6 +11,10 @@
 - **Script injection**: pages are rendered by Jinja2 with autoescape on, and the TypeScript only sets `textContent`. Customer text (names, addresses, notes) is never parsed as HTML. Browser tests cover this.
 - **Order IDs** are random, so they cannot collide or be guessed from timing.
 
+- **Order actions**: cancelling checks that the order belongs to the signed-in customer, and status changes are applied atomically only from the status the actor saw. Tracking needs both the reference and the phone number, and reveals no address or phone.
+- **Saved cart**: the browser stores only product ids, size, quantity and note. Prices are looked up again from the server's catalog on load, and invalid or removed entries are dropped.
+- **Product artwork** is drawn in code and escaped, so a product name cannot become markup.
+
 ## Known limits
 
 - Payments and SMS are simulated. Do not collect real card details with this code.

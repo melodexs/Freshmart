@@ -1,3 +1,4 @@
+{% if notice %}<div class="msg {{ notice[0] }}">{{ notice[1] }}</div>{% endif %}
 {% if not orders %}
   <div class="empty-note">No orders yet. Your first one will show up here.</div>
 {% else %}
@@ -13,7 +14,12 @@
       {%- endfor -%}
     </div>
     {% if o.note %}<div style="margin-top:4px;">Note: {{ o.note }}</div>{% endif %}
-    <div style="margin-top:4px;opacity:.8;">{{ o.status }}</div>
+    {% include "partials/order_progress.html" %}
+    {% if o.status in cancellable %}
+    <button type="button" class="status-btn danger" style="margin-top:8px;"
+            hx-post="/ui/orders/{{ o.id }}/cancel" hx-target="#ordersList" hx-swap="innerHTML"
+            hx-confirm="Cancel order {{ o.id }}?">Cancel order</button>
+    {% endif %}
   </div>
   {% endfor %}
 {% endif %}

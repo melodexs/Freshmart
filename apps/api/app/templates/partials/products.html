@@ -3,7 +3,7 @@
 <div class="grid" id="productGrid">
 {% for p in products %}
   <div class="card" data-product-id="{{ p.id }}">
-    <div class="thumb">{{ p.emoji }}</div>
+    <div class="thumb">{{ p|product_art }}</div>
     <h3>{{ p.name }}</h3>
     {% if p.options|length > 1 %}
       <select class="opt-select" aria-label="Choose size for {{ p.name }}">

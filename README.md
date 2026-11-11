@@ -44,6 +44,7 @@ To make payments real, integrate Paystack or Flutterwave. To make SMS real, use 
 - [API reference](docs/api.md): every endpoint
 - [Deployment](docs/deployment.md): Render setup and environment variables
 - [Security notes](docs/security.md): what is protected and known limits
+- [Orders, tracking and cancellation](docs/orders.md): statuses, cancel, tracking
 - [Contributing](CONTRIBUTING.md): workflow and conventions
 
 ## License

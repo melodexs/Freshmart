@@ -49,3 +49,14 @@ Example for scripts:
 ```bash
 curl -H "X-Staff-Key: $STORE_STAFF_KEY" https://your-site.onrender.com/api/store/notifications
 ```
+
+## Pages and fragments (HTML)
+
+These return HTML for the browser (HTMX), not JSON.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| POST | `/ui/orders/{id}/cancel` | customer cookie | Cancel your own order if it has not left the store. |
+| GET | `/ui/track` | none | The order tracking form. |
+| POST | `/ui/track` | none | Form fields `order_id` and `phone`. Both must match. Rate limited to 10 per minute. |
+| POST | `/api/store/ui/orders/{id}/status` | staff cookie | Form field `status`. Only allowed moves are accepted. |

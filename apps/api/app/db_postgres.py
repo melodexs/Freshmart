@@ -154,3 +154,32 @@ async def add_store_sms(e: dict) -> None:
             e["text"],
             _ts(e["date"]),
         )
+
+
+async def get_order(order_id: str):
+    async with _pool.acquire() as c:
+        r = await c.fetchrow("SELECT * FROM orders WHERE id=$1", order_id)
+    return _order(r) if r else None
+
+
+async def get_all_orders():
+    async with _pool.acquire() as c:
+        rows = await c.fetch("SELECT * FROM orders ORDER BY date DESC")
+    return [_order(r) for r in rows]
+
+
+async def update_order_status(
+    order_id: str, new_status: str, allowed_from: list[str] | None = None
+) -> bool:
+    """Atomic: the status check and the update are one statement."""
+    async with _pool.acquire() as c:
+        if allowed_from is None:
+            res = await c.execute("UPDATE orders SET status=$2 WHERE id=$1", order_id, new_status)
+        else:
+            res = await c.execute(
+                "UPDATE orders SET status=$2 WHERE id=$1 AND status = ANY($3::text[])",
+                order_id,
+                new_status,
+                allowed_from,
+            )
+    return res.endswith(" 1")

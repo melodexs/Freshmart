@@ -46,3 +46,9 @@ static/
 - **The database is swappable.** Routes only call functions in `db.py`. `db_file.py` and `db_postgres.py` implement the same functions, chosen by whether `DATABASE_URL` is set.
 - **Two separate sessions.** Customers get an `fm_token` cookie. Staff get an `fm_staff` cookie scoped to `/api/store`. A customer cookie never grants staff access.
 - **Secrets come from the environment.** `JWT_SECRET` is required in production and the app refuses to start without it.
+
+## Orders and artwork
+
+- `order_status.py` is the single definition of statuses and allowed moves. See [orders.md](orders.md).
+- `illustrations.py` draws each product as inline SVG from a small set of shapes (bottle, can, bag, sack and so on) plus colours. Nothing is downloaded or hosted. To use real photos later, replace the `product_art` filter in `templating.py`.
+- `apps/web/src/persist.ts` saves the cart in the browser (ids, size, quantity, note only).

@@ -32,3 +32,19 @@ def local_time(iso: str) -> str:
 
 templates.env.filters["naira"] = naira
 templates.env.filters["local_time"] = local_time
+
+from . import order_status  # noqa: E402
+
+templates.env.globals["progress_map"] = order_status.PROGRESS
+templates.env.globals["cancellable"] = order_status.CUSTOMER_CAN_CANCEL_FROM
+
+from markupsafe import Markup  # noqa: E402
+
+from . import illustrations  # noqa: E402
+
+
+def product_art(product: dict) -> Markup:
+    return Markup(illustrations.svg_for(product["id"], product["name"]))  # noqa: S704
+
+
+templates.env.filters["product_art"] = product_art

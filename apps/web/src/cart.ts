@@ -1,4 +1,5 @@
 import { $, clear, h, hide, money, show } from "./dom";
+import { fetchCatalog, loadCart, saveCart } from "./persist";
 import type { CartEntry, CartLine, Product } from "./types";
 
 /** In-memory cart. Prices shown here are for display only: the server recomputes
@@ -17,6 +18,7 @@ export function onCartChange(fn: () => void): void {
   listeners.push(fn);
 }
 function notify(): void {
+  saveCart(cart);
   renderCount();
   renderDrawer();
   for (const fn of listeners) fn();
@@ -210,7 +212,7 @@ export function closeCart(): void {
   hide($("cartDrawer"));
 }
 
-export function initCart(): void {
+export async function initCart(): Promise<void> {
   $("cartBtn").onclick = openCart;
   $("cartFab").onclick = openCart;
   $("closeCart").onclick = closeCart;
@@ -225,5 +227,10 @@ export function initCart(): void {
   window.addEventListener("scroll", update, { passive: true });
   update();
 
+  // Bring back a cart saved before a refresh, priced from the live catalog.
+  // This must happen BEFORE the first notify(), which saves (and would erase) the stored cart.
+  const restored = loadCart(await fetchCatalog());
+  for (const [k, v] of restored) cart.set(k, v);
   notify();
+  rehydrateGrid();
 }

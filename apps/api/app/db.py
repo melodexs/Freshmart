@@ -22,3 +22,6 @@ get_orders_for_user = _impl.get_orders_for_user
 add_order = _impl.add_order
 get_store_sms = _impl.get_store_sms
 add_store_sms = _impl.add_store_sms
+get_order = _impl.get_order
+get_all_orders = _impl.get_all_orders
+update_order_status = _impl.update_order_status
