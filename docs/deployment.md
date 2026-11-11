@@ -21,7 +21,7 @@
 | Name | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | In production | Postgres connection string. If unset, a local JSON file is used. |
-| `JWT_SECRET` | In production | Signs session cookies. The app will not start in production without it. |
+| `JWT_SECRET` | In production | Signs session cookies. At least 32 characters. The app will not start in production without it, or with a shorter one. |
 | `STORE_STAFF_KEY` | In production | Key staff enter to view the store inbox. The inbox is disabled if unset. |
 | `ENV` | Off Render | Set to `production` anywhere that is not Render. |
 | `PGSSLMODE` | No | Set to `disable` only for a local Postgres without SSL. |
@@ -32,3 +32,14 @@
 ## Moving from the old layout
 
 The service root moved from `backend` to `apps/api`. If you already deployed the earlier version, update **Root Directory** in the Render service settings (or redeploy from the Blueprint). Nothing changes in the database.
+
+## Before you deploy: checklist
+
+1. **Root Directory** is `apps/api` (the Blueprint sets this; a hand-made service may still point at the repo root).
+2. **`JWT_SECRET`** is set and at least 32 characters. Generate one with `python3 -c "import secrets; print(secrets.token_hex(32))"`.
+3. **`STORE_STAFF_KEY`** is set to something only staff know. Without it the staff screen is disabled.
+4. **`DATABASE_URL`** points at your Postgres. Tables are created on first start; this release adds no columns.
+5. **Health checks:** `/api/health` says the process is up. `/api/ready` also confirms the data store answers (use it for monitoring).
+6. **Browser security policy:** scripts may only load from your own site. If you later add a third-party script (analytics, a payment widget), allow its host in `CSP` in `apps/api/app/main.py`, or the browser will block it.
+7. **Static files are cached for a day.** After a deploy, browsers re-check them, so changes appear without a hard refresh.
+
