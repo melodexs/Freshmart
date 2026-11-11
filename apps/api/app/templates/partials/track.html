@@ -1,0 +1,19 @@
+{% if result %}
+  {% set o = result %}
+  <div class="order-hist-item">
+    <div style="display:flex;justify-content:space-between;font-weight:600;"><span>{{ o.id }}</span><span>{{ o.total|naira }}</span></div>
+    <div style="opacity:.7;font-size:.8rem;">{{ o.date|local_time }}</div>
+    <div style="margin-top:4px;">
+      {%- for i in o["items"] -%}{{ i.qty }}× {{ i.name }}{% if not loop.last %}, {% endif %}{%- endfor -%}
+    </div>
+    {% include "partials/order_progress.html" %}
+  </div>
+  <button type="button" class="btn-ghost" style="margin-top:10px;" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML">Track another order</button>
+{% else %}
+  {% if message %}<div class="msg {{ message[0] }}">{{ message[1] }}</div>{% endif %}
+  <form hx-post="/ui/track" hx-target="#trackBody" hx-swap="innerHTML">
+    <div class="field"><label for="trackRef">Order reference</label><input id="trackRef" name="order_id" placeholder="e.g. FM1A2B3C4D" autocomplete="off" required></div>
+    <div class="field"><label for="trackPhone">Phone number used on the order</label><input id="trackPhone" name="phone" type="tel" placeholder="08012345678" required></div>
+    <button class="btn-primary" type="submit">Track order</button>
+  </form>
+{% endif %}

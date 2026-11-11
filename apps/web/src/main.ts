@@ -160,7 +160,7 @@ function init(): void {
   }
   syncSignedIn();
   initModals();
-  initCart();
+  void initCart();
   initCheckout();
   initAuthEvents();
   setCheckoutHandler(openCheckout);

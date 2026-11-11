@@ -193,10 +193,10 @@ def test_store_feed_shows_orders_escaped_to_staff_only(client, monkeypatch):
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
     form_signup(client)
     place_order(client, address=XSS)
-    assert "New order" not in client.get("/api/store/ui").text  # customer is not staff
+    assert "Deliver to" not in client.get("/api/store/ui").text  # customer is not staff
     client.post("/api/store/ui/login", data={"key": "s3cret"})
     html = client.get("/api/store/ui").text
-    assert "New order" in html
+    assert "Deliver to" in html
     assert "<img" not in html and "&lt;img" in html
 
 

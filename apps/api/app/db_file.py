@@ -88,3 +88,30 @@ async def add_store_sms(entry: dict) -> None:
         data = _read()
         data["storeSms"].insert(0, entry)
         _write(data)
+
+
+async def get_order(order_id: str):
+    with _lock:
+        return next((o for o in _read()["orders"] if o["id"] == order_id), None)
+
+
+async def get_all_orders():
+    with _lock:
+        return list(_read()["orders"])
+
+
+async def update_order_status(
+    order_id: str, new_status: str, allowed_from: list[str] | None = None
+) -> bool:
+    """Set the status. If allowed_from is given, only change it when the current
+    status is one of those (so two staff clicks cannot race into a bad state)."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] == order_id:
+                if allowed_from is not None and o["status"] not in allowed_from:
+                    return False
+                o["status"] = new_status
+                _write(data)
+                return True
+        return False

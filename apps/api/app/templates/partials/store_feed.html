@@ -1,10 +1,29 @@
-{% if not notifications %}
-  <div class="empty-note">No orders yet — this fills up as orders come in.</div>
+{% if notice %}<div class="msg {{ notice[0] }}">{{ notice[1] }}</div>{% endif %}
+{% if not orders %}
+  <div class="empty-note">No orders yet. This fills up as orders come in.</div>
 {% else %}
-  {% for m in notifications %}
+  {% for o in orders %}
   <div class="order-hist-item">
-    <div style="opacity:.7;font-size:.78rem;">{{ m.date|local_time }}</div>
-    <div style="margin-top:4px;">{{ m.text }}</div>
+    <div style="display:flex;justify-content:space-between;font-weight:600;">
+      <span>{{ o.id }}</span><span>{{ o.total|naira }}</span>
+    </div>
+    <div style="opacity:.7;font-size:.78rem;">{{ o.date|local_time }}</div>
+    <div style="margin-top:4px;">
+      {%- for i in o["items"] -%}{{ i.qty }}× {{ i.name }}{% if i.note %} ("{{ i.note }}"){% endif %}{% if not loop.last %}, {% endif %}{%- endfor -%}
+    </div>
+    <div style="margin-top:4px;font-size:.88rem;">
+      Deliver to: {{ o.address }}{% if o.city %}, {{ o.city }}{% endif %}. Customer: {{ o.phone }}.
+      {{ "PAID ahead" if o.payMethod == "before" else "Pay on delivery" }}.
+    </div>
+    <div style="margin-top:6px;"><span class="status-pill">{{ o.status }}</span></div>
+    {% set next = options.get(o.status, []) %}
+    {% if next %}
+    <form class="status-actions" hx-post="/api/store/ui/orders/{{ o.id }}/status" hx-target="#storeInboxList" hx-swap="innerHTML">
+      {% for n in next %}
+        <button type="submit" name="status" value="{{ n }}" class="{{ 'status-btn danger' if n == 'Cancelled' else 'status-btn' }}">{{ n }}</button>
+      {% endfor %}
+    </form>
+    {% endif %}
   </div>
   {% endfor %}
 {% endif %}

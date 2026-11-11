@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, db
+from .. import auth, db, order_status
 from ..products import DELIVERY_FEE, find_option
 
 router = APIRouter()
@@ -98,9 +98,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "city": city_s,
         "payMethod": pay_method,
         "paymentDetail": payment_detail if isinstance(payment_detail, dict) else {},
-        "status": "Payment confirmed"
-        if pay_method == "before"
-        else "Awaiting delivery — pay on arrival",
+        "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }
     await db.add_order(order)
