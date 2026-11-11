@@ -239,3 +239,9 @@ def test_csp_forbids_inline_and_foreign_scripts(client):
     csp = client.get("/").headers["content-security-policy"]
     assert "script-src 'self'" in csp and "'unsafe-inline'" not in csp.split("style-src")[0]
     assert "object-src 'none'" in csp and "frame-ancestors 'none'" in csp
+
+
+def test_static_is_cacheable_but_pages_and_api_are_not(client):
+    assert "max-age=86400" in client.get("/static/styles.css").headers["cache-control"]
+    assert client.get("/").headers["cache-control"] == "no-store"
+    assert client.get("/api/health").headers["cache-control"] == "no-store"
