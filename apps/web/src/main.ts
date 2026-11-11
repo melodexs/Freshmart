@@ -154,7 +154,24 @@ function showOrderPlaced(order: PlacedOrder): void {
   const text = $("confirmText");
   clear(text);
   text.append("Order ", h("strong", { text: order.id }), ` for ${money(order.total)} was placed.`, h("br"), how);
+  const copy = $("copyRef");
+  copy.textContent = "Copy order reference";
+  copy.onclick = () => {
+    void copyText(order.id).then((ok) => {
+      copy.textContent = ok ? "Copied ✓" : `Reference: ${order.id}`;
+    });
+  };
   show($("confirmOverlay"));
+}
+
+/** Copy text to the clipboard. Returns false if the browser refuses (e.g. no permission). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function initBackToTop(): void {
