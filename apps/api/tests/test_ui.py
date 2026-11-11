@@ -246,3 +246,8 @@ def test_browser_404_is_a_friendly_page_but_api_stays_json(client):
     assert page.status_code == 404 and "Back to the shop" in page.text
     api = client.get("/api/nope", headers={"accept": "text/html"})
     assert api.status_code == 404 and api.json() == {"error": "Not found."}
+
+
+def test_page_has_skip_link_to_the_catalog(client):
+    html = client.get("/").text
+    assert 'class="skip-link" href="#catalog"' in html and 'id="catalog"' in html

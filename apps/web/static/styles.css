@@ -234,3 +234,7 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .error-page h1{margin:12px 0 6px; font-size:1.5rem;}
 .error-page p{opacity:.75; max-width:420px; margin:0 auto 20px;}
 .error-home{display:inline-block; text-decoration:none; width:auto; padding:10px 22px;}
+
+.skip-link{position:absolute; left:-9999px; top:8px; background:var(--green-900); color:#fff; padding:8px 14px; border-radius:6px; z-index:999; text-decoration:none;}
+.skip-link:focus{left:8px;}
+:focus-visible{outline:3px solid var(--ochre-dark); outline-offset:2px;}
