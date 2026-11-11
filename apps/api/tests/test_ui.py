@@ -293,7 +293,15 @@ def test_unknown_sort_value_is_ignored(client):
     assert client.get("/ui/products", params={"sort": "'; drop table"}).status_code == 200
 
 
-def test_page_offers_a_sort_dropdown_that_keeps_search_and_category(client):
+def test_page_offers_a_sort_dropdown_sharing_one_filters_include(client):
     html = client.get("/").text
     assert 'id="sortSelect"' in html and 'value="price-asc"' in html
-    assert "#sortSelect" in html  # search and category requests include the chosen sort
+    assert 'id="filters"' in html and 'hx-include="#filters"' in html  # one shared include for all controls
+
+
+def test_sort_applies_within_a_category(client):
+    html = client.get("/ui/products", params={"cat": "Snacks", "sort": "name"}).text
+    import re
+
+    names = re.findall(r"<h3>([^<]+)</h3>", html)
+    assert len(names) == 4 and names == sorted(names, key=str.lower)

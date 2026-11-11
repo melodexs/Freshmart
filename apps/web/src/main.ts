@@ -95,6 +95,11 @@ function initAuthEvents(): void {
   // Opening "Sign in" from the header: include the remembered email.
   document.body.addEventListener("htmx:configRequest", (e) => {
     const detail = (e as CustomEvent).detail as { path: string; elt: HTMLElement; parameters: Record<string, string> };
+    // Every product-list request carries the chosen sort, whichever control triggered it.
+    if (detail.path.startsWith("/ui/products")) {
+      const sort = document.getElementById("sortSelect") as HTMLSelectElement | null;
+      if (sort && !("sort" in detail.parameters)) detail.parameters["sort"] = sort.value;
+    }
     if (detail.elt.hasAttribute("data-last-email")) {
       const email = getLastEmail();
       if (email) detail.parameters["last"] = email;
