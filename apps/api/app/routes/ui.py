@@ -51,13 +51,20 @@ async def home(request: Request):
 
 
 @router.get("/ui/products", response_class=HTMLResponse)
-async def product_grid(request: Request, cat: str = "All", q: str = ""):
+async def product_grid(request: Request, cat: str = "All", q: str = "", sort: str = "default"):
     q_norm = q.strip().lower()[:60]
     items = [
         p
         for p in products.PRODUCTS
         if (cat == "All" or p["cat"] == cat) and q_norm in p["name"].lower()
     ]
+    # Price sorting uses each product's smallest size, which is the "from" price shoppers see first.
+    if sort == "price-asc":
+        items.sort(key=lambda p: min(o["price"] for o in p["options"]))
+    elif sort == "price-desc":
+        items.sort(key=lambda p: min(o["price"] for o in p["options"]), reverse=True)
+    elif sort == "name":
+        items.sort(key=lambda p: p["name"].lower())
     resp = _render(
         request,
         "partials/products.html",

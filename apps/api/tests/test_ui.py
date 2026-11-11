@@ -263,3 +263,27 @@ def test_grid_shows_a_result_count(client):
     assert 'id="resultCount">28 items<' in all_html
     one = client.get("/ui/products", params={"q": "yam"}).text
     assert 'id="resultCount">1 item<' in one
+
+
+def _names(html):
+    import re
+
+    return re.findall(r"<h3>([^<]+)</h3>", html)
+
+
+def test_grid_can_sort_by_name_and_price(client):
+    by_name = _names(client.get("/ui/products", params={"sort": "name"}).text)
+    assert by_name == sorted(by_name, key=str.lower)
+    from app.products import PRODUCTS
+
+    def cheapest(name):
+        p = next(p for p in PRODUCTS if p["name"] == name)
+        return min(o["price"] for o in p["options"])
+
+    asc = [cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-asc"}).text)]
+    desc = [cheapest(n) for n in _names(client.get("/ui/products", params={"sort": "price-desc"}).text)]
+    assert asc == sorted(asc) and desc == sorted(desc, reverse=True)
+
+
+def test_unknown_sort_value_is_ignored(client):
+    assert client.get("/ui/products", params={"sort": "'; drop table"}).status_code == 200
