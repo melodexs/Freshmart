@@ -238,3 +238,7 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .skip-link{position:absolute; left:-9999px; top:8px; background:var(--green-900); color:#fff; padding:8px 14px; border-radius:6px; z-index:999; text-decoration:none;}
 .skip-link:focus{left:8px;}
 :focus-visible{outline:3px solid var(--ochre-dark); outline-offset:2px;}
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important;}
+}

@@ -251,3 +251,8 @@ def test_browser_404_is_a_friendly_page_but_api_stays_json(client):
 def test_page_has_skip_link_to_the_catalog(client):
     html = client.get("/").text
     assert 'class="skip-link" href="#catalog"' in html and 'id="catalog"' in html
+
+
+def test_stylesheet_respects_reduced_motion(client):
+    css = client.get("/static/styles.css").text
+    assert "prefers-reduced-motion: reduce" in css
