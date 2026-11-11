@@ -19,6 +19,8 @@ export function onCartChange(fn: () => void): void {
 }
 function notify(): void {
   saveCart(cart);
+  const clearBtn = document.getElementById("clearCartBtn");
+  if (clearBtn) clearBtn.hidden = cart.size === 0;
   renderCount();
   renderDrawer();
   for (const fn of listeners) fn();
@@ -216,6 +218,9 @@ export async function initCart(): Promise<void> {
   $("cartBtn").onclick = openCart;
   $("cartFab").onclick = openCart;
   $("closeCart").onclick = closeCart;
+  $("clearCartBtn").onclick = () => {
+    if (window.confirm("Remove everything from your cart?")) clearCart();
+  };
   $("cartOverlay").onclick = closeCart;
 
   // Fade the floating cart near the top, where the header cart is easy to reach.

@@ -256,3 +256,6 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .info-item span{opacity:.75;}
 
 .status-summary{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+
+.btn-link{background:none; border:none; color:var(--danger); font-size:.82rem; cursor:pointer; text-decoration:underline; margin-left:auto; margin-right:10px;}
+.btn-link[hidden]{display:none;}
