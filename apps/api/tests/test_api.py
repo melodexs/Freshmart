@@ -279,3 +279,16 @@ def test_unexpected_error_hides_details_and_returns_json_for_api(client):
         assert "secret" not in r.text and r.headers["x-content-type-options"] == "nosniff"
         page = c.get("/_boom_test_page", headers={"accept": "text/html"})
         assert page.status_code == 404  # unknown page still gets the 404 page, not a crash
+
+
+def test_order_rejects_invalid_phone_and_stores_the_normalised_one(client):
+    signup(client)
+    body = {
+        "items": [{"productId": "p1", "optionIndex": 0, "qty": 1}],
+        "address": "1 Main St",
+        "payMethod": "delivery",
+    }
+    bad = client.post("/api/orders", json={**body, "phone": "12345"})
+    assert bad.status_code == 400 and "valid Nigerian mobile" in bad.json()["error"]
+    ok = client.post("/api/orders", json={**body, "phone": "+234 801 234 5678"})
+    assert ok.status_code == 200 and ok.json()["order"]["phone"] == "08012345678"
