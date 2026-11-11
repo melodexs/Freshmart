@@ -233,3 +233,9 @@ def test_extra_security_headers_are_sent(client):
     h = client.get("/api/health").headers
     assert "camera=()" in h["permissions-policy"]
     assert h["cross-origin-opener-policy"] == "same-origin"
+
+
+def test_csp_forbids_inline_and_foreign_scripts(client):
+    csp = client.get("/").headers["content-security-policy"]
+    assert "script-src 'self'" in csp and "'unsafe-inline'" not in csp.split("style-src")[0]
+    assert "object-src 'none'" in csp and "frame-ancestors 'none'" in csp
