@@ -28,11 +28,32 @@ function setLastEmail(email: string): void {
 
 // ---------- modals ----------
 
+/** Who had focus before a dialog opened, so closing it can hand focus back. */
+let lastOpener: HTMLElement | null = null;
+
+const FOCUSABLE = "input, select, textarea, button:not([data-close-modal]), a[href]";
+
 function openModal(id: string): void {
-  show($(id));
+  lastOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const overlay = $(id);
+  show(overlay);
+  // Content may still be loading (HTMX), so focus the dialog itself first, then the first field.
+  const dialog = overlay.querySelector<HTMLElement>(".modal");
+  if (dialog) {
+    dialog.tabIndex = -1;
+    dialog.focus({ preventScroll: true });
+    window.setTimeout(() => {
+      const first = dialog.querySelector<HTMLElement>(FOCUSABLE);
+      if (first && overlay.classList.contains("show")) first.focus({ preventScroll: true });
+    }, 250);
+  }
 }
 function closeModal(el: HTMLElement): void {
   hide(el);
+  if (lastOpener && document.querySelectorAll(".modal-overlay.show").length === 0) {
+    lastOpener.focus({ preventScroll: true });
+    lastOpener = null;
+  }
 }
 
 function initModals(): void {
