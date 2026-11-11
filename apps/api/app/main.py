@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -70,6 +70,17 @@ async def robots(request: Request):
         f"User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /ui/\n\nSitemap: {base}/sitemap.xml\n"
     )
     return PlainTextResponse(body)
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap(request: Request):
+    base = str(request.base_url).rstrip("/")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"<url><loc>{base}/</loc></url></urlset>"
+    )
+    return Response(xml, media_type="application/xml")
 
 
 @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
