@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from .. import auth, db, order_status
+from ..phone import normalise as normalise_phone
 from ..products import DELIVERY_FEE, find_option
 
 router = APIRouter()
@@ -52,6 +53,9 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         return err(400, "Too many items in one order.")
     if not address or not phone:
         return err(400, "Please add your delivery address and phone number.")
+    clean_phone = normalise_phone(phone)
+    if clean_phone is None:
+        return err(400, "Please enter a valid Nigerian mobile number, like 0801 234 5678.")
     if pay_method not in ("before", "delivery"):
         return err(400, "Please choose a payment method.")
 
@@ -94,7 +98,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "deliveryFee": DELIVERY_FEE,
         "total": total,
         "address": str(address),
-        "phone": str(phone),
+        "phone": clean_phone,
         "city": city_s,
         "payMethod": pay_method,
         "paymentDetail": payment_detail if isinstance(payment_detail, dict) else {},
