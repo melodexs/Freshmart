@@ -233,3 +233,9 @@ def test_favicon_is_linked_and_served(client):
     assert 'rel="icon"' in client.get("/").text
     r = client.get("/static/favicon.svg")
     assert r.status_code == 200 and "<svg" in r.text
+
+
+def test_sitemap_lists_the_home_page(client):
+    r = client.get("/sitemap.xml")
+    assert r.status_code == 200 and "xml" in r.headers["content-type"]
+    assert "<loc>" in r.text and "urlset" in r.text
