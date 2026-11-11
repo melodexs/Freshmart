@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -61,6 +61,15 @@ app.include_router(ui_routes.router)
 @app.get("/api/health")
 async def health():
     return {"ok": True}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots(request: Request):
+    base = str(request.base_url).rstrip("/")
+    body = (
+        f"User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /ui/\n\nSitemap: {base}/sitemap.xml\n"
+    )
+    return PlainTextResponse(body)
 
 
 @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
