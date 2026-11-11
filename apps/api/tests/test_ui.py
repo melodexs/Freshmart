@@ -214,3 +214,10 @@ def test_templates_autoescape_enabled():
     from app.templating import templates
 
     assert "<b>" not in templates.env.from_string("{{ x }}").render(x="<b>")
+
+
+def test_page_has_seo_and_share_metadata(client):
+    html = client.get("/").text
+    assert '<meta name="description"' in html
+    assert 'property="og:title"' in html and 'name="twitter:card"' in html
+    assert '<meta name="theme-color"' in html
