@@ -317,3 +317,7 @@ def test_home_explains_delivery_fee_payment_and_tracking(client):
     html = client.get("/").text
     assert "How ordering works" in html and "₦800 delivery fee" in html
     assert "Pay on delivery" in html and "Track every order" in html
+
+
+def test_confirmation_offers_to_copy_the_order_reference(client):
+    assert 'id="copyRef"' in client.get("/").text
