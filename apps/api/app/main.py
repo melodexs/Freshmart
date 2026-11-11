@@ -84,6 +84,12 @@ async def security_headers(request: Request, call_next):
     )
     resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     resp.headers.setdefault("Content-Security-Policy", CSP)
+    # Static files change rarely: let browsers reuse them for a day, but always
+    # revalidate so a new deploy is picked up. Pages and API are never cached.
+    if request.url.path.startswith("/static/"):
+        resp.headers.setdefault("Cache-Control", "public, max-age=86400, must-revalidate")
+    else:
+        resp.headers.setdefault("Cache-Control", "no-store")
     return resp
 
 
