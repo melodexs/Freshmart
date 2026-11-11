@@ -63,6 +63,8 @@ async def security_headers(request: Request, call_next):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     return resp
 
 

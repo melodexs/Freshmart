@@ -227,3 +227,9 @@ def test_production_requires_jwt_secret(monkeypatch):
         del sys.modules[m]
     with pytest.raises(RuntimeError):
         importlib.import_module("app.config")
+
+
+def test_extra_security_headers_are_sent(client):
+    h = client.get("/api/health").headers
+    assert "camera=()" in h["permissions-policy"]
+    assert h["cross-origin-opener-policy"] == "same-origin"
