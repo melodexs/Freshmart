@@ -325,3 +325,13 @@ def test_confirmation_offers_to_copy_the_order_reference(client):
 
 def test_cart_drawer_has_a_clear_button(client):
     assert 'id="clearCartBtn"' in client.get("/").text
+
+
+def test_every_titled_modal_is_an_accessible_dialog(client):
+    import re
+
+    html = client.get("/").text
+    dialogs = re.findall(r'role="dialog" aria-modal="true" aria-labelledby="(\w+)"', html)
+    assert len(dialogs) == 7
+    for ident in dialogs:
+        assert f'id="{ident}"' in html  # each dialog points at a real heading
