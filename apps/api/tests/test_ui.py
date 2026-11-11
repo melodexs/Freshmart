@@ -321,3 +321,7 @@ def test_home_explains_delivery_fee_payment_and_tracking(client):
 
 def test_confirmation_offers_to_copy_the_order_reference(client):
     assert 'id="copyRef"' in client.get("/").text
+
+
+def test_cart_drawer_has_a_clear_button(client):
+    assert 'id="clearCartBtn"' in client.get("/").text
