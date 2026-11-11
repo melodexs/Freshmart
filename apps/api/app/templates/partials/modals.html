@@ -1,9 +1,9 @@
 {# Modal shells. Content for sign in / sign up / orders / store inbox is filled in by HTMX;
    cart + checkout + card simulation are driven by the TypeScript in apps/web/src. #}
 <div class="modal-overlay" id="storeInboxOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="storeTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Store SMS inbox</h2>
+      <h2 id="storeTitle">Store SMS inbox</h2>
       <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div class="small-note">This simulates what the store's phone (+234 800 000 0000) would receive by SMS whenever an order comes in. A real deployment sends these through Termii or Africa's Talking from your server, not from the browser.</div>
@@ -23,9 +23,9 @@
 </aside>
 
 <div class="modal-overlay" id="authOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Sign in</h2>
+      <h2 id="authTitle">Sign in</h2>
       <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div id="authNotice"></div>
@@ -34,9 +34,9 @@
 </div>
 
 <div class="modal-overlay" id="signupOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="signupTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Create your account</h2>
+      <h2 id="signupTitle">Create your account</h2>
       <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div id="signupBody"></div>
@@ -45,9 +45,9 @@
 
 <!-- checkout modal -->
 <div class="modal-overlay" id="checkoutOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Checkout</h2>
+      <h2 id="checkoutTitle">Checkout</h2>
       <button class="close-x" id="closeCheckout">✕</button>
     </div>
     <div class="tab-row">
@@ -114,9 +114,9 @@
 
 <!-- confirmation modal -->
 <div class="modal-overlay" id="confirmOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="confirm-icon">✅</div>
-    <h2 style="text-align:center;">Order placed</h2>
+    <h2 id="confirmTitle" style="text-align:center;">Order placed</h2>
     <p style="text-align:center;font-size:.9rem;opacity:.8;" id="confirmText"></p>
     <button class="btn-ghost" id="copyRef" type="button">Copy order reference</button>
     <button class="btn-primary" id="confirmClose">Done</button>
@@ -125,9 +125,9 @@
 </div>
 
 <div class="modal-overlay" id="trackOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="trackTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Track an order</h2>
+      <h2 id="trackTitle">Track an order</h2>
       <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <p style="font-size:.85rem;opacity:.75;margin-top:0;">No account needed. Enter your order reference and the phone number you used.</p>
@@ -136,9 +136,9 @@
 </div>
 
 <div class="modal-overlay" id="ordersOverlay">
-  <div class="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ordersTitle">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2>Your orders</h2>
+      <h2 id="ordersTitle">Your orders</h2>
       <button class="close-x" type="button" data-close-modal>✕</button>
     </div>
     <div id="ordersList"></div>
