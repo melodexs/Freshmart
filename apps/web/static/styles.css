@@ -250,3 +250,7 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 
 .back-to-top{position:fixed; left:14px; bottom:18px; width:42px; height:42px; border-radius:50%; border:none; background:var(--green-900); color:#fff; font-size:1.2rem; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,.25); z-index:40;}
 .back-to-top[hidden]{display:none;}
+
+.info-strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:18px auto;}
+.info-item{background:var(--cream); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; display:flex; flex-direction:column; gap:4px; font-size:.88rem;}
+.info-item span{opacity:.75;}
