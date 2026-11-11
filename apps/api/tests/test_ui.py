@@ -221,3 +221,15 @@ def test_page_has_seo_and_share_metadata(client):
     assert '<meta name="description"' in html
     assert 'property="og:title"' in html and 'name="twitter:card"' in html
     assert '<meta name="theme-color"' in html
+
+
+def test_robots_blocks_api_and_points_to_sitemap(client):
+    r = client.get("/robots.txt")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    assert "Disallow: /api/" in r.text and "Sitemap:" in r.text
+
+
+def test_favicon_is_linked_and_served(client):
+    assert 'rel="icon"' in client.get("/").text
+    r = client.get("/static/favicon.svg")
+    assert r.status_code == 200 and "<svg" in r.text
