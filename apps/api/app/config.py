@@ -23,12 +23,16 @@ IS_PRODUCTION = (
     or os.environ.get("ENV", "").lower() == "production"
 )
 
+MIN_SECRET_LENGTH = 32
 _jwt_secret = os.environ.get("JWT_SECRET", "").strip()
 if not _jwt_secret:
     if IS_PRODUCTION:
         raise RuntimeError("JWT_SECRET must be set in production.")
     # Dev only: random per-process secret, so there is no guessable default.
     _jwt_secret = secrets.token_hex(32)
+elif IS_PRODUCTION and len(_jwt_secret) < MIN_SECRET_LENGTH:
+    # HS256 keys shorter than 32 bytes are weak. Render's generateValue is longer.
+    raise RuntimeError(f"JWT_SECRET must be at least {MIN_SECRET_LENGTH} characters in production.")
 JWT_SECRET = _jwt_secret
 
 COOKIE_NAME = "fm_token"
