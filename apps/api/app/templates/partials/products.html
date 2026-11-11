@@ -1,5 +1,5 @@
 {# Product grid. Also resets the category nav + heading via out-of-band swaps. #}
-<div class="section-title"><h2 id="sectionHeading">{{ "All products" if active == "All" else active }}</h2></div>
+<div class="section-title"><h2 id="sectionHeading">{{ "All products" if active == "All" else active }}</h2><span class="result-count" id="resultCount">{{ products|length }} item{{ "" if products|length == 1 else "s" }}</span></div>
 <div class="grid" id="productGrid">
 {% for p in products %}
   <div class="card" data-product-id="{{ p.id }}">
