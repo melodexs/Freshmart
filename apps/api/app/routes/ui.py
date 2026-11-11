@@ -218,11 +218,13 @@ async def store_logout(request: Request):
 
 async def _store_feed(request: Request, notice: tuple[str, str] | None = None) -> HTMLResponse:
     orders = await db.get_all_orders()
+    counts = {st: sum(1 for o in orders if o["status"] == st) for st in order_status.ALL}
     return _render(
         request,
         "partials/store_feed.html",
         orders=orders,
         options=order_status.STAFF_NEXT,
+        counts=counts,
         notice=notice,
     )
 
