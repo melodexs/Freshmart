@@ -256,3 +256,10 @@ def test_page_has_skip_link_to_the_catalog(client):
 def test_stylesheet_respects_reduced_motion(client):
     css = client.get("/static/styles.css").text
     assert "prefers-reduced-motion: reduce" in css
+
+
+def test_grid_shows_a_result_count(client):
+    all_html = client.get("/ui/products").text
+    assert 'id="resultCount">28 items<' in all_html
+    one = client.get("/ui/products", params={"q": "yam"}).text
+    assert 'id="resultCount">1 item<' in one

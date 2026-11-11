@@ -242,3 +242,6 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 @media (prefers-reduced-motion: reduce){
   *, *::before, *::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important;}
 }
+
+.section-title{display:flex; align-items:baseline; gap:10px;}
+.result-count{font-size:.8rem; opacity:.6;}
