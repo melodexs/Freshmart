@@ -52,6 +52,33 @@ async def http_exc(request: Request, exc: StarletteHTTPException):
     return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
 
 
+@app.exception_handler(Exception)
+async def unexpected_exc(request: Request, exc: Exception):
+    """Last resort. Never shows the exception to the visitor; the server log keeps it."""
+    import logging
+
+    logging.getLogger("freshmart").exception("Unhandled error on %s", request.url.path)
+    path = request.url.path
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if wants_html and not path.startswith(("/api/", "/ui/")):
+        resp = templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "code": 500,
+                "heading": "Something went wrong on our side",
+                "message": "We have been notified. Please try again in a moment.",
+            },
+            status_code=500,
+        )
+    else:
+        resp = JSONResponse({"error": "Something went wrong. Please try again."}, status_code=500)
+    # Errors skip the normal middleware, so set the essential headers here.
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exc(request: Request, exc: RequestValidationError):
     return JSONResponse({"error": "Invalid request."}, status_code=400)

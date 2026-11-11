@@ -257,3 +257,25 @@ def test_ready_endpoint_checks_the_data_store(client, monkeypatch):
     monkeypatch.setattr(db, "get_all_orders", boom)
     r = client.get("/api/ready")
     assert r.status_code == 503 and r.json()["ok"] is False
+
+
+def test_unexpected_error_hides_details_and_returns_json_for_api(client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    async def boom():
+        raise RuntimeError("secret internal detail")
+
+    # Insert ahead of the /api catch-all so this route is the one that matches.
+    app.router.add_api_route("/api/_boom_test", boom, methods=["GET"])
+    app.router.routes.insert(0, app.router.routes.pop())
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        r = c.get("/api/_boom_test")
+        assert r.status_code == 500 and r.json() == {
+            "error": "Something went wrong. Please try again."
+        }
+        assert "secret" not in r.text and r.headers["x-content-type-options"] == "nosniff"
+        page = c.get("/_boom_test_page", headers={"accept": "text/html"})
+        assert page.status_code == 404  # unknown page still gets the 404 page, not a crash
