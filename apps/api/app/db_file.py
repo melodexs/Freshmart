@@ -115,3 +115,13 @@ async def update_order_status(
                 _write(data)
                 return True
         return False
+
+
+async def ping() -> None:
+    """Liveness check for the JSON file store (local development).
+
+    This store treats a missing or corrupt file as empty and keeps going, so there is
+    nothing meaningful to fail here. The real check is the Postgres one, which runs a
+    query and raises when the database is unreachable.
+    """
+    return None

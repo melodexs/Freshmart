@@ -25,3 +25,4 @@ add_store_sms = _impl.add_store_sms
 get_order = _impl.get_order
 get_all_orders = _impl.get_all_orders
 update_order_status = _impl.update_order_status
+ping = _impl.ping

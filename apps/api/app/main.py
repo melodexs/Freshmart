@@ -136,7 +136,7 @@ async def health():
 async def ready():
     """Readiness: confirms the data store answers, not just that the process is up."""
     try:
-        await db.get_all_orders()
+        await db.ping()
     except Exception:
         return JSONResponse({"ok": False, "error": "Data store unavailable."}, status_code=503)
     return {"ok": True}

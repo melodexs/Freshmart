@@ -183,3 +183,9 @@ async def update_order_status(
                 allowed_from,
             )
     return res.endswith(" 1")
+
+
+async def ping() -> None:
+    """Cheap liveness check: one trivial query, no matter how many orders exist."""
+    async with _pool.acquire() as c:
+        await c.fetchval("SELECT 1")
