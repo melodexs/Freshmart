@@ -27,6 +27,8 @@
 - Unexpected errors return a safe message (JSON for the API, a branded page for browsers) and never show internal details.
 
 ### Performance and operations
+- Optional real product photos: drop `<id>.webp` into `apps/web/static/products/` and it replaces that product's drawing.
+- The Render health check now uses `/api/ready`, which runs a constant-time database ping (it no longer loads every order).
 - Static files are cached for a day and revalidated; pages and the API are never cached.
 - `/api/ready` checks that the data store answers, for monitoring.
 
