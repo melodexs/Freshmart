@@ -2,7 +2,7 @@
   "name": "freshmart-web",
   "private": true,
   "version": "1.0.0",
-  "description": "Freshmart storefront. TypeScript for the small client-side parts; pages are rendered by the API (Jinja + HTMX).",
+  "description": "Okuii's Grocery Store (OGS) storefront. TypeScript for the small client-side parts; pages are rendered by the API (Jinja + HTMX).",
   "scripts": {
     "build": "tsc --noEmit && esbuild src/main.ts --bundle --minify --target=es2020 --outfile=static/js/main.js",
     "typecheck": "tsc --noEmit",

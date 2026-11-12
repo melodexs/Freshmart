@@ -1,4 +1,4 @@
-"""Freshmart (Fatoke Market) backend: FastAPI port of the Express server."""
+"""Freshmart (Okuii's Grocery Store, OGS) backend: FastAPI port of the Express server."""
 
 from __future__ import annotations
 
@@ -23,13 +23,11 @@ from .templating import templates
 async def lifespan(app: FastAPI):
     await db.init()
     mode = "Postgres" if config.USE_POSTGRES else "local JSON file"
-    print(f"Fatoke Market backend (Python) running, data store: {mode}")
+    print(f"OGS backend (Python) running, data store: {mode}")
     yield
 
 
-app = FastAPI(
-    title="Freshmart API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
-)
+app = FastAPI(title="OGS API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 # Keep the {"error": "..."} shape the frontend already expects.

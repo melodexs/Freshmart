@@ -2,7 +2,7 @@
 {% block body %}
 <header>
   <div class="topbar">
-    <div class="logo">Fatoke <span>Market</span></div>
+    <div class="logo" aria-label="Okuii&#39;s Grocery Store (OGS)"><span class="logo-full">Okuii&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></div>
     <div class="topbar-spacer"></div>
     <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
     <button class="icon-btn" id="ordersBtn" type="button"
@@ -59,7 +59,7 @@
 
 <footer>
   <div class="wrap">
-    Fatoke Market — a demo grocery storefront. Not a live store; no real orders are placed or charged.
+    Okuii&#39;s Grocery Store (OGS) — a demo grocery storefront. Not a live store; no real orders are placed or charged.
     <span style="opacity:.5;"> · </span>
     <button id="storeInboxBtn" type="button" class="link-btn"
             hx-get="/api/store/ui" hx-target="#storeInboxList" hx-swap="innerHTML"

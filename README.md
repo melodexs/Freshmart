@@ -1,6 +1,6 @@
-# Freshmart
+# Okuii's Grocery Store (OGS)
 
-**Fatoke Market**: a grocery delivery demo. A Python (FastAPI) app that renders its own pages (Jinja2 + HTMX), with TypeScript for the cart and checkout, in one repository.
+**Okuii's Grocery Store (OGS)**: a grocery delivery demo. A Python (FastAPI) app that renders its own pages (Jinja2 + HTMX), with TypeScript for the cart and checkout, in one repository.
 
 ```
 Freshmart/
