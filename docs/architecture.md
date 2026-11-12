@@ -50,5 +50,5 @@ static/
 ## Orders and artwork
 
 - `order_status.py` is the single definition of statuses and allowed moves. See [orders.md](orders.md).
-- `illustrations.py` draws each product as inline SVG from a small set of shapes (bottle, can, bag, sack and so on) plus colours. Nothing is downloaded or hosted. To use real photos later, replace the `product_art` filter in `templating.py`.
+- `illustrations.py` draws each product as inline SVG from a small set of shapes (bottle, can, bag, sack and so on) plus colours. Nothing is downloaded or hosted. Real photos are optional: put `<id>.webp` in `apps/web/static/products/` and it replaces that product's drawing (see the README there).
 - `apps/web/src/persist.ts` saves the cart in the browser (ids, size, quantity, note only).
