@@ -39,7 +39,7 @@ The service root moved from `backend` to `apps/api`. If you already deployed the
 2. **`JWT_SECRET`** is set and at least 32 characters. Generate one with `python3 -c "import secrets; print(secrets.token_hex(32))"`.
 3. **`STORE_STAFF_KEY`** is set to something only staff know. Without it the staff screen is disabled.
 4. **`DATABASE_URL`** points at your Postgres. Tables are created on first start; this release adds no columns.
-5. **Health checks:** `/api/health` says the process is up. `/api/ready` also confirms the data store answers (use it for monitoring).
+5. **Health checks:** `/api/health` says the process is up. `/api/ready` also confirms the data store answers; the Blueprint uses it as the Render health check.
 6. **Browser security policy:** scripts may only load from your own site. If you later add a third-party script (analytics, a payment widget), allow its host in `CSP` in `apps/api/app/main.py`, or the browser will block it.
 7. **Static files are cached for a day.** After a deploy, browsers re-check them, so changes appear without a hard refresh.
 
