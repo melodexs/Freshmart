@@ -27,7 +27,7 @@ def trigger(resp):
 def test_home_page_renders(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Fatoke" in r.text and 'id="catalog"' in r.text
+    assert "Okuii" in r.text and 'id="catalog"' in r.text
     assert "/static/js/main.js" in r.text and "/static/vendor/htmx.min.js" in r.text
 
 
@@ -335,3 +335,12 @@ def test_every_titled_modal_is_an_accessible_dialog(client):
     assert len(dialogs) == 7
     for ident in dialogs:
         assert f'id="{ident}"' in html  # each dialog points at a real heading
+
+
+def test_storefront_uses_the_ogs_name_everywhere_a_shopper_can_see_it(client):
+    home = client.get("/").text
+    assert "Okuii&#39;s Grocery Store (OGS)" in home
+    assert 'property="og:site_name" content="Okuii&#39;s Grocery Store (OGS)"' in home
+    assert "Fatoke" not in home
+    missing = client.get("/no-such-page", headers={"accept": "text/html"}).text
+    assert "Okuii&#39;s Grocery Store (OGS)" in missing and "Fatoke" not in missing
