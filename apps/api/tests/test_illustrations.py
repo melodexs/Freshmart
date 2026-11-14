@@ -30,3 +30,27 @@ def test_grid_uses_artwork_not_emoji(client):
     html = client.get("/ui/products").text
     assert html.count('class="art"') == len(PRODUCTS)
     assert 'class="thumb">🍚' not in html
+
+
+def test_every_product_has_unique_gradient_ids():
+    import re
+
+    ids = []
+    for pid in illustrations.ART:
+        ids += re.findall(r'id="([^"]+)"', illustrations.svg_for(pid, "x"))
+    assert len(ids) == len(set(ids)) == len(illustrations.ART) * 2
+
+
+def test_gradient_never_replaces_a_text_label_colour():
+    import re
+
+    for pid in illustrations.ART:
+        svg = illustrations.svg_for(pid, "x")
+        for fill in re.findall(r"<text[^>]*fill=\"([^\"]+)\"", svg):
+            assert not fill.startswith("url("), pid
+
+
+def test_body_uses_a_gradient_and_a_ground_shadow():
+    svg = illustrations.svg_for("p1", "Rice")
+    assert "linearGradient" in svg and 'fill="url(#gp1-body)"' in svg
+    assert 'opacity=".16"' in svg

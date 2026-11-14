@@ -147,12 +147,55 @@ def _shape(shape: str, main: str, accent: str, text: str) -> str:
     )
 
 
+def _shade(hex_colour: str, factor: float) -> str:
+    """Lighten (factor > 0) or darken (factor < 0) a #rrggbb colour. Used only on fixed palette values."""
+    h = hex_colour.lstrip("#")
+    if len(h) != 6:
+        return hex_colour
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+    if factor >= 0:
+        r, g, b = (round(c + (255 - c) * factor) for c in (r, g, b))
+    else:
+        r, g, b = (round(c * (1 + factor)) for c in (r, g, b))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _gradient_fills(markup: str, main: str, gradient: str) -> str:
+    """Swap the solid main colour for the gradient on shapes, but never on <text> labels."""
+    parts = markup.split("<text")
+    parts[0] = parts[0].replace(f'fill="{main}"', f'fill="{gradient}"')
+    return "<text".join(parts)
+
+
+def _defs(uid: str, main: str) -> str:
+    """Soft top-to-bottom gradient for the main body, plus a glossy highlight."""
+    return (
+        "<defs>"
+        f'<linearGradient id="{uid}-body" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{_shade(main, 0.35)}"/>'
+        f'<stop offset=".55" stop-color="{main}"/>'
+        f'<stop offset="1" stop-color="{_shade(main, -0.22)}"/></linearGradient>'
+        f'<linearGradient id="{uid}-shine" x1="0" y1="0" x2="1" y2="0">'
+        '<stop offset="0" stop-color="#fff" stop-opacity=".0"/>'
+        '<stop offset=".5" stop-color="#fff" stop-opacity=".55"/>'
+        '<stop offset="1" stop-color="#fff" stop-opacity=".0"/></linearGradient>'
+        "</defs>"
+    )
+
+
 def svg_for(product_id: str, name: str) -> str:
     """Return a complete <svg> for a product. `name` is only used as the accessible label."""
     shape, main, accent, text = ART.get(product_id, DEFAULT)
+    # Ids must be unique across the many inline SVGs on one page. The product id is
+    # either a catalog key or a fixed fallback, and is reduced to safe characters.
+    uid = "g" + "".join(ch for ch in product_id if ch.isalnum())[:12]
+    body = _gradient_fills(_shape(shape, main, accent, text), main, f"url(#{uid}-body)")
     return (
         f'<svg class="art" viewBox="0 0 140 150" role="img" aria-label="{escape(name, quote=True)}" '
         f'xmlns="http://www.w3.org/2000/svg">'
-        f'<ellipse cx="70" cy="140" rx="42" ry="6" fill="#000" opacity=".12"/>'
-        f"{_shape(shape, main, accent, text)}</svg>"
+        f"{_defs(uid, main)}"
+        f'<ellipse cx="70" cy="141" rx="40" ry="5" fill="#000" opacity=".16"/>'
+        f"{body}"
+        f'<rect x="44" y="30" width="14" height="100" rx="7" fill="url(#{uid}-shine)" opacity=".7"/>'
+        "</svg>"
     )
