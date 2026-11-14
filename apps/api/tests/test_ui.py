@@ -344,3 +344,10 @@ def test_storefront_uses_the_ogs_name_everywhere_a_shopper_can_see_it(client):
     assert "Fatoke" not in home
     missing = client.get("/no-such-page", headers={"accept": "text/html"}).text
     assert "Okuii&#39;s Grocery Store (OGS)" in missing and "Fatoke" not in missing
+
+
+def test_cards_carry_their_category_for_the_backdrop_tint(client):
+    html = client.get("/ui/products", params={"cat": "Snacks"}).text
+    assert html.count('data-cat="Snacks"') == 4
+    amp = client.get("/ui/products", params={"cat": "Drinks & Dairy"}).text
+    assert 'data-cat="Drinks &amp; Dairy"' in amp  # escaped, so the attribute cannot break out
