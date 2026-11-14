@@ -266,3 +266,20 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .logo-full + .logo-abbr::before{content:"";}
 @media (max-width:520px){ .logo-full{display:none;} .logo{font-size:1.6rem;} }
 @media (min-width:521px){ .logo{font-size:1.4rem;} }
+
+/* Card polish: soft per-category backdrops, depth, and a gentle hover lift. */
+.card{transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; box-shadow:0 1px 2px rgba(31,61,46,.06);}
+.card:hover{transform:translateY(-3px); box-shadow:0 10px 22px rgba(31,61,46,.14); border-color:#c9d8c4;}
+.card .thumb{position:relative; height:132px; background:radial-gradient(circle at 50% 38%, #ffffff 0%, var(--tint,#eef5ea) 78%); border:1px solid rgba(0,0,0,.04);}
+.card[data-cat="Foodstuff"]{--tint:#f6ecd2;}
+.card[data-cat="Snacks"]{--tint:#fbe3c4;}
+.card[data-cat="Drinks & Dairy"]{--tint:#dcecf8;}
+.card[data-cat="Fresh Produce"]{--tint:#dff0d5;}
+.card[data-cat="Household"]{--tint:#e1e7f7;}
+.card[data-cat="Bakery"]{--tint:#f3e0c8;}
+.card[data-cat="Beauty & Personal Care"]{--tint:#f6dfee;}
+.card .thumb .art{filter:drop-shadow(0 4px 5px rgba(0,0,0,.14)); transition:transform .25s ease;}
+.card:hover .thumb .art{transform:scale(1.06);}
+.card h3{line-height:1.25; min-height:2.5em; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.price{font-size:1.02rem;}
+@media (prefers-reduced-motion: reduce){ .card, .card .thumb .art{transition:none;} .card:hover{transform:none;} .card:hover .thumb .art{transform:none;} }
