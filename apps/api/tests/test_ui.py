@@ -27,7 +27,7 @@ def trigger(resp):
 def test_home_page_renders(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Okuii" in r.text and 'id="catalog"' in r.text
+    assert "Okwui" in r.text and 'id="catalog"' in r.text
     assert "/static/js/main.js" in r.text and "/static/vendor/htmx.min.js" in r.text
 
 
@@ -339,11 +339,11 @@ def test_every_titled_modal_is_an_accessible_dialog(client):
 
 def test_storefront_uses_the_ogs_name_everywhere_a_shopper_can_see_it(client):
     home = client.get("/").text
-    assert "Okuii&#39;s Grocery Store (OGS)" in home
-    assert 'property="og:site_name" content="Okuii&#39;s Grocery Store (OGS)"' in home
+    assert "Okwui&#39;s Grocery Store (OGS)" in home
+    assert 'property="og:site_name" content="Okwui&#39;s Grocery Store (OGS)"' in home
     assert "Fatoke" not in home
     missing = client.get("/no-such-page", headers={"accept": "text/html"}).text
-    assert "Okuii&#39;s Grocery Store (OGS)" in missing and "Fatoke" not in missing
+    assert "Okwui&#39;s Grocery Store (OGS)" in missing and "Fatoke" not in missing
 
 
 def test_cards_carry_their_category_for_the_backdrop_tint(client):
