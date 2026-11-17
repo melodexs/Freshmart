@@ -1,4 +1,4 @@
-"""Freshmart (Okuii's Grocery Store, OGS) backend: FastAPI port of the Express server."""
+"""Freshmart (Okwui's Grocery Store, OGS) backend: FastAPI port of the Express server."""
 
 from __future__ import annotations
 

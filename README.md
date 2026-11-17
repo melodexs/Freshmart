@@ -1,6 +1,6 @@
-# Okuii's Grocery Store (OGS)
+# Okwui's Grocery Store (OGS)
 
-**Okuii's Grocery Store (OGS)**: a grocery delivery demo. A Python (FastAPI) app that renders its own pages (Jinja2 + HTMX), with TypeScript for the cart and checkout, in one repository.
+**Okwui's Grocery Store (OGS)**: a grocery delivery demo. A Python (FastAPI) app that renders its own pages (Jinja2 + HTMX), with TypeScript for the cart and checkout, in one repository.
 
 ```
 Freshmart/
