@@ -21,6 +21,7 @@
 | Name | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | In production | Postgres connection string. If unset, a local JSON file is used. |
+| `WHATSAPP_NUMBER` | No | The store's WhatsApp number, for example `0801 234 5678`. When set to a valid Nigerian mobile number, a Chat on WhatsApp button appears on the shop. Leave it empty to hide the button. |
 | `JWT_SECRET` | In production | Signs session cookies. At least 32 characters. The app will not start in production without it, or with a shorter one. |
 | `STORE_STAFF_KEY` | In production | Key staff enter to view the store inbox. The inbox is disabled if unset. |
 | `ENV` | Off Render | Set to `production` anywhere that is not Render. |

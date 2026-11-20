@@ -11,7 +11,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 
-from .. import auth, db, order_status, products, ratelimit
+from .. import auth, config, db, order_status, products, ratelimit
+from ..phone import whatsapp_link
 from ..templating import templates
 
 router = APIRouter()
@@ -47,6 +48,7 @@ async def home(request: Request):
         categories=CATEGORIES,
         active="All",
         delivery_fee=products.DELIVERY_FEE,
+        whatsapp=whatsapp_link(config.WHATSAPP_NUMBER, "Hello! I have a question about my order."),
     )
 
 

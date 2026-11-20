@@ -7,6 +7,7 @@
 - New deeper forest green and gold palette, rounder cards, photo-first product frames, pill-shaped Add buttons.
 
 ### Shopping
+- Optional WhatsApp chat button: set `WHATSAPP_NUMBER` and customers can message the store. Hidden until you set a valid number.
 - Sort products by price or name. The chosen sort is kept when you switch category or search.
 - A result count beside the product heading.
 - Back-to-top button after scrolling.
