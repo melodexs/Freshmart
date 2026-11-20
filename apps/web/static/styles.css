@@ -1,9 +1,9 @@
 
 :root{
-  --green-900:#1f3d2e; --green-700:#2f5a41; --green-500:#4a8560;
-  --cream:#f2f8ee; --paper:#ffffff; --ochre:#ffc107; --ochre-dark:#e6a800;
-  --ink:#20241f; --line:#dfe6db; --danger:#a4331f;
-  --radius:10px;
+  --green-900:#12281d; --green-700:#1f5a3d; --green-500:#3f8a63;
+  --cream:#f7f1e3; --paper:#ffffff; --ochre:#d4af37; --ochre-dark:#b8941f;
+  --ink:#1b211c; --line:#e7e0cf; --danger:#a4331f;
+  --radius:14px;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
@@ -11,7 +11,7 @@
 *{box-sizing:border-box;}
 html{scroll-padding-top:env(safe-area-inset-top,0px); height:100%;}
 body{
-  margin:0; height:100%; background:#ffffff; color:var(--ink);
+  margin:0; height:100%; background:#faf6ec; color:var(--ink);
   font-family:'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   line-height:1.45;
 }
@@ -24,7 +24,7 @@ button{font-family:inherit;}
 header{
   position:sticky; top:0; z-index:40; background:var(--green-900); color:var(--cream);
   padding-top:calc(env(safe-area-inset-top,0px));
-  border-bottom:5px solid var(--ochre);
+  border-bottom:3px solid var(--ochre); box-shadow:0 6px 20px rgba(18,40,29,.25);
 }
 .topbar{display:flex; align-items:center; gap:16px; padding:18px 20px; max-width:1100px; margin:0 auto;}
 .logo{font-family:Georgia,serif; font-size:1.8rem; font-weight:800; letter-spacing:.3px; white-space:nowrap;}
@@ -157,7 +157,7 @@ main{padding:26px 0 60px;}
 }
 .tab-row{display:flex; gap:8px; margin-bottom:16px;}
 .tab-row button{
-  flex:1; padding:10px 8px; border-radius:7px; border:1px solid #8f9b8f; background:#ffffff; color:#1f3d2e; cursor:pointer; font-size:.9rem; font-weight:700;
+  flex:1; padding:10px 8px; border-radius:7px; border:1px solid #8f9b8f; background:#ffffff; color:var(--green-900); cursor:pointer; font-size:.9rem; font-weight:700;
 }
 .tab-row button.active{background:var(--green-700); color:#ffffff; border-color:var(--green-700);}
 .msg{font-size:.82rem; padding:8px 10px; border-radius:7px; margin-bottom:10px;}
@@ -283,3 +283,15 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .card h3{line-height:1.25; min-height:2.5em; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
 .price{font-size:1.02rem;}
 @media (prefers-reduced-motion: reduce){ .card, .card .thumb .art{transition:none;} .card:hover{transform:none;} .card:hover .thumb .art{transform:none;} }
+
+/* Premium finish: real product photos on a clean frame. */
+.card{background:var(--paper); border-color:var(--line); border-radius:var(--radius); padding:10px 10px 14px;}
+.card .thumb{height:auto; aspect-ratio:1/1; padding:0; overflow:hidden; border-radius:calc(var(--radius) - 4px); background:#f1ebdb;}
+.card .thumb img.photo{width:100%; height:100%; object-fit:cover; border-radius:0; transition:transform .45s ease;}
+.card:hover .thumb img.photo{transform:scale(1.05);}
+.card .thumb .art{padding:10px;}
+.card h3{font-size:1rem; letter-spacing:.1px;}
+.price{color:var(--green-900); font-size:1.08rem;}
+.add-btn{background:var(--green-700); border-radius:999px; padding:8px 16px; font-weight:600; letter-spacing:.2px; transition:background .15s, transform .15s;}
+.add-btn:hover{background:var(--green-900); transform:translateY(-1px);}
+@media (prefers-reduced-motion: reduce){ .card:hover .thumb img.photo{transform:none;} .add-btn:hover{transform:none;} }
