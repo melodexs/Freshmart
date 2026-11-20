@@ -363,3 +363,15 @@ def test_stylesheet_keeps_the_phone_header_slim_and_the_tablet_header_inside_the
     assert "@media (min-width:521px) and (max-width:899px)" in css
     # the info strip scrolls sideways on phones rather than stacking three tall boxes
     assert "scroll-snap-type:x mandatory" in css
+
+
+def test_stylesheet_stays_small_and_does_not_embed_images():
+    """A 75 KB photo once sat inside the stylesheet and delayed first paint on phones."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2] / "web" / "static" / "styles.css").read_text()
+    assert "base64," not in css, "move images to static/img instead of embedding them"
+    assert len(css.encode()) < 40 * 1024, "stylesheet has grown past 40 KB"
+    assert (
+        Path(__file__).resolve().parents[2] / "web" / "static" / "img" / "hero-shelves.webp"
+    ).exists()
