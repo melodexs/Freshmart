@@ -3,6 +3,7 @@ text (addresses, notes, names) is always HTML-escaped by default."""
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -62,6 +63,26 @@ def _photo_url(product_id: str) -> str | None:
     return None
 
 
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _load_frames() -> dict[str, str]:
+    """Each photo's own edge colour, so the card frame blends into it with no visible seam."""
+    try:
+        data = json.loads((Path(__file__).parent / "photo_frames.json").read_text("utf8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, str) and _HEX.match(v)}
+
+
+PHOTO_FRAMES = _load_frames()
+
+
+def frame_colour(product_id: str) -> str:
+    """CSS colour for the frame behind a product's photo ('' when there is none)."""
+    return PHOTO_FRAMES.get(str(product_id), "")
+
+
 def product_art(product: dict) -> Markup:
     url = _photo_url(str(product["id"]))
     if url:
@@ -72,3 +93,4 @@ def product_art(product: dict) -> Markup:
 
 
 templates.env.filters["product_art"] = product_art
+templates.env.filters["frame_colour"] = frame_colour
