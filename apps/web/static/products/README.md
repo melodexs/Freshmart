@@ -1,11 +1,8 @@
-# Product photos (optional)
+# Product images
 
-Put a photo here named after the product id and it replaces the drawn illustration on the shop page. No code change needed.
+One image per product, named after the product id (`p1.webp` is Local Rice, and so on). If an image is missing, the shop falls back to the drawn illustration for that product.
 
-- File name: `<id>.webp` (best), `.jpg`, `.jpeg` or `.png`. For example `p1.webp` for Local Rice.
-- Product ids are in `apps/api/app/products.py` (`p1` to `p28`).
-- Square or slightly tall photos around 600 px wide look best, under 100 KB each.
-- Products without a photo keep their drawn illustration, so you can add them one at a time.
-- Only use photos you own or that are licensed for this. Keep the credit for any CC BY photo.
-
-The shop loads these from its own address, which the Content-Security-Policy already allows.
+- **These 28 images are AI-generated studio-style pictures, not photographs of the real products.** They show a typical example of each item. Branded products (Coca-Cola, Pepsi, Indomie, Peak Milk, Climax) are shown with generic, unbranded packaging on purpose, so no one else's logo is faked.
+- Replace any of them with your own real photo of the product by saving it here with the same name. Square, about 600 px wide, and under 100 KB works best. WebP is smallest; `.jpg` and `.png` also work.
+- Product ids are in `apps/api/app/products.py`.
+- The shop loads these from its own address, which the Content-Security-Policy already allows. A test fails if a product has no image or an image is over 120 KB.

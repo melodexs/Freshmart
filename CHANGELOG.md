@@ -2,6 +2,10 @@
 
 ## Premium polish
 
+### Look and feel
+- All 28 products now have a clean, studio-style image (AI-generated, about 16 KB each) in place of the drawings. Branded items use generic packaging.
+- New deeper forest green and gold palette, rounder cards, photo-first product frames, pill-shaped Add buttons.
+
 ### Shopping
 - Sort products by price or name. The chosen sort is kept when you switch category or search.
 - A result count beside the product heading.
