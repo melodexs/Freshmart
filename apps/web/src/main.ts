@@ -1,4 +1,12 @@
-import { initCart, rehydrateGrid, setCheckoutHandler, setDeliveryFee } from "./cart";
+import {
+  addFromOrder,
+  initCart,
+  openCart,
+  type ReorderLine,
+  rehydrateGrid,
+  setCheckoutHandler,
+  setDeliveryFee,
+} from "./cart";
 import { configureCheckout, initCheckout, openCheckout } from "./checkout";
 import { $, $maybe, clear, h, hide, money, show } from "./dom";
 import type { PlacedOrder } from "./types";
@@ -74,12 +82,51 @@ function initModals(): void {
   });
 }
 
+// ---------- reorder ----------
+
+/** Read a JSON array from a data attribute. Bad or missing data gives an empty list. */
+function readList(el: HTMLElement, name: string): unknown[] {
+  try {
+    const v: unknown = JSON.parse(el.dataset[name] ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function initReorder(): void {
+  document.addEventListener("click", async (e) => {
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLElement>(".reorder-btn");
+    if (!btn) return;
+    const ids = readList(btn, "reorder");
+    const options = readList(btn, "reorderOptions");
+    const qtys = readList(btn, "reorderQty");
+    const wanted: ReorderLine[] = ids.map((id, i) => ({
+      productId: String(id),
+      optionIndex: Number(options[i]),
+      qty: Number(qtys[i]),
+    }));
+    const { added, skipped } = await addFromOrder(wanted);
+    const overlay = btn.closest<HTMLElement>(".modal-overlay");
+    if (overlay) closeModal(overlay);
+    if (added > 0) openCart();
+    showSuccessToast(
+      added === 0
+        ? "Sorry, none of those items are available any more."
+        : skipped > 0
+          ? `${added} item${added === 1 ? "" : "s"} added. ${skipped} no longer sold.`
+          : `${added} item${added === 1 ? "" : "s"} added to your cart.`,
+      added > 0 && skipped === 0,
+    );
+  });
+}
+
 // ---------- toasts ----------
 
 let successTimer: number | undefined;
-function showSuccessToast(text: string): void {
+function showSuccessToast(text: string, ok = true): void {
   const t = $("successToast");
-  t.textContent = "✅ " + text;
+  t.textContent = (ok ? "✅ " : "⚠️ ") + text;
   t.style.display = "block";
   window.clearTimeout(successTimer);
   successTimer = window.setTimeout(() => (t.style.display = "none"), 2600);
@@ -216,6 +263,7 @@ function init(): void {
   }
   syncSignedIn();
   initModals();
+  initReorder();
   initBackToTop();
   void initCart();
   initCheckout();
