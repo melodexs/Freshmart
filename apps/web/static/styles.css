@@ -295,3 +295,49 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .add-btn{background:var(--green-700); border-radius:999px; padding:8px 16px; font-weight:600; letter-spacing:.2px; transition:background .15s, transform .15s;}
 .add-btn:hover{background:var(--green-900); transform:translateY(-1px);}
 @media (prefers-reduced-motion: reduce){ .card:hover .thumb img.photo{transform:none;} .add-btn:hover{transform:none;} }
+
+/* Wide screens: tighter header rows and a wider content area, so products start higher. */
+@media (min-width:900px){
+  .topbar{padding:10px 20px;}
+  .logo{font-size:1.5rem;}
+  .search-row{padding:0 0 8px;}
+  .search input{padding:8px 16px;}
+  nav.cats .wrap{padding:6px 20px;}
+  nav.cats button{padding:5px 14px; font-size:.85rem;}
+  .wrap, .topbar{max-width:1240px;}
+}
+
+/* Mid-width screens (tablets): the header buttons were wider than the screen. */
+@media (min-width:521px) and (max-width:899px){
+  .topbar{gap:6px; padding:12px 14px; flex-wrap:wrap;}
+  .logo{font-size:1.25rem;}
+  .icon-btn{padding:8px 8px; font-size:.88rem;}
+}
+
+/* Get to the food sooner: a shorter hero, and an info strip that scrolls sideways on phones. */
+.hero{padding:24px 0 20px;}
+.hero h1{font-size:2rem;}
+.hero p{margin-bottom:6px;}
+@media (max-width:640px){
+  .hero{padding:18px 0 16px;}
+  .hero h1{font-size:1.55rem;}
+  .hero p{font-size:.9rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .info-strip{display:flex; overflow-x:auto; gap:10px; margin:12px auto; padding-bottom:4px; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;}
+  .info-item{flex:0 0 78%; scroll-snap-align:start; padding:10px 12px;}
+}
+
+/* Phones: keep the sticky header slim. Logo on top, buttons in one swipeable row. */
+@media (max-width:520px){
+  .topbar{display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px 8px; padding:8px 12px;}
+  .topbar-spacer{display:none;}
+  .logo{font-size:1.35rem; grid-column:1;}
+  #account-area{grid-column:2; display:flex; justify-content:flex-end; gap:0; min-width:0; overflow-x:auto; scrollbar-width:none;}
+  #account-area::-webkit-scrollbar{display:none;}
+  .topbar > .icon-btn{grid-row:2;}
+  .topbar .icon-btn{padding:6px 8px; font-size:.8rem; gap:4px;}
+  #ordersBtn{grid-column:1 / span 1; justify-self:start;}
+  .search-row{padding:0 0 6px;}
+  .search input{padding:8px 14px; font-size:.9rem;}
+  nav.cats .wrap{padding:5px 12px;}
+  nav.cats button{padding:5px 12px; font-size:.82rem;}
+}
