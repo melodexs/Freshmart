@@ -20,3 +20,18 @@ def normalise(raw: str) -> str | None:
     elif len(digits) == 10 and not digits.startswith("0"):
         digits = "0" + digits
     return digits if _MOBILE.match(digits) else None
+
+
+def whatsapp_link(raw: str, message: str = "") -> str | None:
+    """A wa.me chat link for a Nigerian mobile number, or None if the number is not valid.
+
+    WhatsApp wants the international form with no plus sign (234801...). The message is
+    URL-encoded, so it cannot break out of the link.
+    """
+    from urllib.parse import quote
+
+    local = normalise(raw)
+    if local is None:
+        return None
+    link = f"https://wa.me/234{local[1:]}"
+    return f"{link}?text={quote(message)}" if message else link

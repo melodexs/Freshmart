@@ -341,3 +341,9 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
   nav.cats .wrap{padding:5px 12px;}
   nav.cats button{padding:5px 12px; font-size:.82rem;}
 }
+
+/* Optional WhatsApp chat button (only rendered when WHATSAPP_NUMBER is set). */
+.whatsapp-fab{position:fixed; left:14px; bottom:calc(14px + env(safe-area-inset-bottom,0px)); z-index:45; display:flex; align-items:center; gap:8px; background:#0e7a40; color:#fff; text-decoration:none; font-weight:700; font-size:.9rem; padding:11px 16px; border-radius:999px; box-shadow:0 6px 18px rgba(0,0,0,.28); transition:transform .15s;}
+.whatsapp-fab:hover{transform:translateY(-2px); background:#0a6434;}
+@media (max-width:520px){ .whatsapp-fab span{display:none;} .whatsapp-fab{padding:13px; font-size:1.2rem;} }
+@media (prefers-reduced-motion: reduce){ .whatsapp-fab{transition:none;} .whatsapp-fab:hover{transform:none;} }

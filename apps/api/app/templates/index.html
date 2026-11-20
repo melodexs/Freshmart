@@ -51,6 +51,11 @@
   <div class="info-item"><strong>📦 Track every order</strong><span>Use the Track button with your reference and phone number.</span></div>
 </section>
 
+{% if whatsapp %}
+<a class="whatsapp-fab" href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer"
+   aria-label="Chat with us on WhatsApp">💬 <span>Chat on WhatsApp</span></a>
+{% endif %}
+
 <main class="wrap" id="catalog" hx-get="/ui/products" hx-trigger="load" hx-swap="innerHTML">
   <div class="empty-note">Loading products…</div>
 </main>

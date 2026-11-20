@@ -43,5 +43,8 @@ COOKIE_SECURE = IS_PRODUCTION
 STORE_STAFF_KEY = os.environ.get("STORE_STAFF_KEY", "").strip()
 PORT = int(os.environ.get("PORT", "4000"))
 
+# Optional: the store's WhatsApp number. When set (and valid) the shop shows a chat button.
+WHATSAPP_NUMBER = os.environ.get("WHATSAPP_NUMBER", "").strip()
+
 # Hosted Postgres needs SSL. Set PGSSLMODE=disable only for a local, non-SSL database.
 PG_SSL = False if os.environ.get("PGSSLMODE", "").lower() == "disable" else "require"
