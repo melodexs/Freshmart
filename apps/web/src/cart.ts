@@ -67,6 +67,38 @@ export function changeQty(key: string, delta: number): void {
   rehydrateGrid();
 }
 
+/** One line of a past order, as stored by the server. */
+export interface ReorderLine {
+  productId: string;
+  optionIndex: number;
+  qty: number;
+}
+
+/** Put the lines of an earlier order back in the cart at today's prices.
+ * Anything no longer sold (or whose size no longer exists) is skipped, and counted. */
+export async function addFromOrder(wanted: ReorderLine[]): Promise<{ added: number; skipped: number }> {
+  const catalog = await fetchCatalog();
+  let added = 0;
+  let skipped = 0;
+  for (const w of wanted) {
+    const product = catalog.find((p) => p.id === w.productId);
+    const okIndex = Number.isInteger(w.optionIndex) && w.optionIndex >= 0;
+    const okQty = Number.isInteger(w.qty) && w.qty > 0 && w.qty <= 1000;
+    if (!product || !okIndex || !product.options[w.optionIndex] || !okQty) {
+      skipped += 1;
+      continue;
+    }
+    const key = `${product.id}|${w.optionIndex}`;
+    const existing = cart.get(key);
+    if (existing) existing.qty += w.qty;
+    else cart.set(key, { qty: w.qty, note: "", product, optionIndex: w.optionIndex });
+    added += 1;
+  }
+  notify();
+  rehydrateGrid();
+  return { added, skipped };
+}
+
 function addToCart(product: Product, optionIndex: number): void {
   const key = `${product.id}|${optionIndex}`;
   const existing = cart.get(key);
