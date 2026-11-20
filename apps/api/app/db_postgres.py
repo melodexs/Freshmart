@@ -26,7 +26,18 @@ async def init() -> None:
     global _pool
     # Hosted Postgres (Render/Neon/Supabase) needs SSL. "require" encrypts
     # without verifying the CA chain, matching the Node version's behaviour.
-    _pool = await asyncpg.create_pool(_dsn(), ssl=config.PG_SSL, min_size=1, max_size=5)
+    # Serverless Postgres (Neon) suspends when idle and drops connections, so a pooled
+    # connection can be dead by the next order. Recycle idle ones well before that, and
+    # never let a call hang forever.
+    _pool = await asyncpg.create_pool(
+        _dsn(),
+        ssl=config.PG_SSL,
+        min_size=1,
+        max_size=5,
+        timeout=30,  # opening a connection (allows for a cold database waking up)
+        command_timeout=30,  # any single query
+        max_inactive_connection_lifetime=120,  # drop idle connections after 2 minutes
+    )
     async with _pool.acquire() as c:
         await c.execute(
             """
