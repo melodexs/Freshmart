@@ -351,3 +351,15 @@ def test_cards_carry_their_category_for_the_backdrop_tint(client):
     assert html.count('data-cat="Snacks"') == 4
     amp = client.get("/ui/products", params={"cat": "Drinks & Dairy"}).text
     assert 'data-cat="Drinks &amp; Dairy"' in amp  # escaped, so the attribute cannot break out
+
+
+def test_stylesheet_keeps_the_phone_header_slim_and_the_tablet_header_inside_the_screen():
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2] / "web" / "static" / "styles.css").read_text()
+    # phones: logo and buttons share a grid instead of stacking on five lines
+    assert "@media (max-width:520px)" in css and "grid-template-columns:auto 1fr" in css
+    # tablets: header buttons wrap instead of hanging off the screen
+    assert "@media (min-width:521px) and (max-width:899px)" in css
+    # the info strip scrolls sideways on phones rather than stacking three tall boxes
+    assert "scroll-snap-type:x mandatory" in css
