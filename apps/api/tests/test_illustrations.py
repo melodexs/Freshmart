@@ -28,8 +28,23 @@ def test_unknown_product_falls_back_instead_of_crashing():
 
 def test_grid_uses_artwork_not_emoji(client):
     html = client.get("/ui/products").text
-    assert html.count('class="art"') == len(PRODUCTS)
+    # Each product shows a real photo or, failing that, its drawing. Never an emoji.
+    assert html.count('class="art photo"') + html.count('class="art"') == len(PRODUCTS)
     assert 'class="thumb">🍚' not in html
+
+
+def test_every_product_has_a_real_photo_file():
+    from app import templating
+
+    missing = [p["id"] for p in PRODUCTS if templating._photo_url(p["id"]) is None]
+    assert missing == [], f"no photo file for: {missing}"
+
+
+def test_photos_are_small_enough_for_mobile_data():
+    from app import templating
+
+    biggest = max(f.stat().st_size for f in templating.PHOTO_DIR.glob("p*.webp"))
+    assert biggest < 120 * 1024, f"largest photo is {biggest // 1024} KB"
 
 
 def test_every_product_has_unique_gradient_ids():
