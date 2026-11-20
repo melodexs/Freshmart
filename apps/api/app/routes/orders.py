@@ -82,6 +82,9 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
                 "qty": qty,
                 "price": option["price"],
                 "note": str(raw.get("note") or "")[:300],
+                # Kept so the customer can reorder later. Old orders simply do not have these.
+                "productId": product["id"],
+                "optionIndex": raw["optionIndex"],
             }
         )
 
