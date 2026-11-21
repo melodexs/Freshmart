@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, order_status
+from .. import auth, catalogue, db, discounts, order_status, ratelimit
 from ..phone import normalise as normalise_phone
 
 router = APIRouter()
@@ -108,7 +108,15 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
 
     subtotal = sum(line["price"] * line["qty"] for line in lines)
     delivery_fee = area_fee
-    total = subtotal + delivery_fee
+    code_rule, discount = None, 0
+    code = discounts.normalise(body.get("discountCode"))
+    if code:
+        code_rule = await db.get_discount(code)
+        used, mine = await db.discount_usage(code, user["email"])
+        discount, why = discounts.check(code_rule, subtotal, used, mine)
+        if why:
+            return err(400, why)
+    total = subtotal - discount + delivery_fee
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     order = {
@@ -116,6 +124,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "date": now,
         "items": lines,
         "subtotal": subtotal,
+        "discount": discount,
         "deliveryFee": delivery_fee,
         "total": total,
         "address": str(address),
@@ -124,7 +133,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "customerName": customer_name,
         "instructions": instructions,
         "payMethod": pay_method,
-        "paymentDetail": {},
+        "paymentDetail": {"discountCode": code, "discountAmount": discount} if discount else {},
         "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }
@@ -137,14 +146,48 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
                 await db.adjust_stock(pid, q)
             return err(409, "Sorry, one of the items just sold out. Please check your cart.")
         reserved.append((product_id, qty))
+    # Claim the code's use last among the checks, in one atomic step, so the last use cannot be taken twice.
+    if discount and not await db.claim_discount(code_rule, user["email"], order["id"], discount):
+        for pid, q in reserved:
+            await db.adjust_stock(pid, q)
+        return err(409, "Sorry, that code has just been used up. Please remove it and try again.")
     try:
         await db.add_order(order)
     except Exception:
         for pid, q in reserved:
             await db.adjust_stock(pid, q)
+        if discount:
+            await db.release_discount(order["id"])
         raise
 
     return {"order": order}
+
+
+@router.post("/discount-check")
+async def discount_check(request: Request, user: dict = Depends(auth.require_auth)):
+    """Show what a code would take off the current cart. Nothing is claimed here."""
+    ratelimit.limit(request, "discount-check", 20, 60)  # stops guessing codes
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    subtotal = 0
+    for raw in body.get("items") if isinstance(body.get("items"), list) else []:
+        found = await catalogue.find_option(
+            raw.get("productId") if isinstance(raw, dict) else None,
+            raw.get("optionIndex") if isinstance(raw, dict) else None,
+        )
+        qty = raw.get("qty") if isinstance(raw, dict) else None
+        if found and isinstance(qty, int) and not isinstance(qty, bool) and 0 < qty <= MAX_QTY:
+            subtotal += found[1]["price"] * qty
+    code = discounts.normalise(body.get("code"))
+    rule = await db.get_discount(code) if code else None
+    used, mine = await db.discount_usage(code, user["email"]) if rule else (0, False)
+    off, why = discounts.check(rule, subtotal, used, mine)
+    if why:
+        return JSONResponse({"error": why}, status_code=400)
+    return {"code": code, "discount": off, "subtotal": subtotal}
 
 
 @router.get("/mine")

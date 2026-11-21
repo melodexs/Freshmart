@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, images, order_status
+from .. import auth, catalogue, db, discounts, images, order_status
 
 MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
 
@@ -421,3 +421,25 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
     await db.save_image(image_id, data)
     await db.add_audit("admin", "image_uploaded", image_id, {"bytes": len(data)})
     return {"url": f"/media/{image_id}", "bytes": len(data)}
+
+
+@router.get("/discounts")
+async def list_discount_codes():
+    return {"codes": await db.list_discounts()}
+
+
+@router.post("/discounts")
+async def save_discount_code(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    rule, problem = discounts.validate_definition(body if isinstance(body, dict) else {})
+    if problem:
+        return JSONResponse({"error": problem}, status_code=400)
+    existing = await db.get_discount(rule["code"])
+    await db.save_discount(rule)
+    await db.add_audit(
+        "admin", "discount_changed" if existing else "discount_created", rule["code"], rule
+    )
+    return {"code": rule}
