@@ -13,11 +13,15 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/premium.css">
+<link rel="preload" href="/static/fonts/Fraunces-normal-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/Inter-normal-400.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
 <a class="skip-link" href="#catalog">Skip to products</a>
 {% block body %}{% endblock %}
 <script src="/static/vendor/htmx.min.js"></script>
 {% block scripts %}<script type="module" src="/static/js/main.js"></script>{% endblock %}
+<script src="/static/js/premium.js" defer></script>
 </body>
 </html>
