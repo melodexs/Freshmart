@@ -24,4 +24,15 @@ def client(tmp_path, monkeypatch):
 
     ratelimit.reset()
     with TestClient(app) as c:
+        # Pay-before-delivery needs a real bank account, so most tests start with one set.
+        import asyncio
+
+        from app import db
+
+        asyncio.new_event_loop().run_until_complete(
+            db.set_setting(
+                "bank_details",
+                {"bank": "Test Bank", "accountName": "OGS Test", "accountNumber": "0123456789"},
+            )
+        )
         yield c

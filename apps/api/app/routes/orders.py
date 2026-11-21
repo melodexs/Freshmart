@@ -44,7 +44,8 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
     phone = body.get("phone")
     city = body.get("city")
     pay_method = body.get("payMethod")
-    payment_detail = body.get("paymentDetail")
+    # Anything the browser says about payment is ignored: payment is only ever recorded by the
+    # server (a verified gateway payment, or an admin confirming receipt).
 
     if not isinstance(items, list) or len(items) == 0:
         return err(400, "Your cart is empty.")
@@ -57,6 +58,18 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         return err(400, "Please enter a valid Nigerian mobile number, like 0801 234 5678.")
     if pay_method not in ("before", "delivery"):
         return err(400, "Please choose a payment method.")
+    if pay_method == "before" and not (await catalogue.bank_details())["ready"]:
+        return err(
+            409, "Pay before delivery is not available right now. Please choose pay on delivery."
+        )
+    area = str(city or "").strip() or catalogue.DEFAULT_AREA
+    area_fee = await catalogue.fee_for_area(area)
+    if area_fee is None:
+        return err(
+            400, "Sorry, we do not deliver to that area yet. Please choose one from the list."
+        )
+    customer_name = " ".join(str(body.get("name") or "").split())[:80]
+    instructions = " ".join(str(body.get("instructions") or "").split())[:200]
 
     # Rebuild every line from the server catalog; prices from the browser
     # are never trusted.
@@ -94,10 +107,9 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         )
 
     subtotal = sum(line["price"] * line["qty"] for line in lines)
-    delivery_fee = await catalogue.delivery_fee()
+    delivery_fee = area_fee
     total = subtotal + delivery_fee
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    city_s = str(city) if city else ""
 
     order = {
         "id": new_order_id(),
@@ -108,9 +120,11 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "total": total,
         "address": str(address),
         "phone": clean_phone,
-        "city": city_s,
+        "city": area,
+        "customerName": customer_name,
+        "instructions": instructions,
         "payMethod": pay_method,
-        "paymentDetail": payment_detail if isinstance(payment_detail, dict) else {},
+        "paymentDetail": {},
         "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }
@@ -129,15 +143,6 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         for pid, q in reserved:
             await db.adjust_stock(pid, q)
         raise
-
-    # Simulated store SMS (see README: real SMS needs a gateway such as Termii).
-    summary = ", ".join(f"{line['qty']}x {line['name']}" for line in lines)
-    pay_line = "PAID (before delivery)" if pay_method == "before" else "Pay on delivery"
-    text = (
-        f"New order {order['id']} — ₦{naira(total)}. {summary}. "
-        f"Deliver to: {order['address']}, {city_s}. Customer: {order['phone']}. {pay_line}."
-    )
-    await db.add_store_sms({"id": order["id"], "text": text, "date": now})
 
     return {"order": order}
 

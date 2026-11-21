@@ -7,6 +7,7 @@ mapped into the lifecycle below.
 
 from __future__ import annotations
 
+AWAITING_PAYMENT = "Awaiting payment"
 PAID = "Payment confirmed"
 AWAITING = "Awaiting delivery — pay on arrival"
 PREPARING = "Preparing your order"
@@ -15,10 +16,15 @@ DELIVERED = "Delivered"
 CANCELLED = "Cancelled"
 
 # Statuses an order can start with (set by orders.place_order).
-INITIAL = {"before": PAID, "delivery": AWAITING}
+# A pay-ahead order is NOT paid when it is placed. It stays "Awaiting payment" until a payment
+# is genuinely verified (Paystack, server side) or an authorised admin confirms receipt.
+INITIAL = {"before": AWAITING_PAYMENT, "delivery": AWAITING}
 
 # What staff may move an order to, from each current status.
+# "Awaiting payment" -> "Payment confirmed" is deliberately NOT here: confirming payment is its own
+# audited action (confirm_payment in the admin API), never a plain status move.
 STAFF_NEXT: dict[str, list[str]] = {
+    AWAITING_PAYMENT: [CANCELLED],
     PAID: [PREPARING, CANCELLED],
     AWAITING: [PREPARING, CANCELLED],
     PREPARING: [OUT, CANCELLED],
@@ -28,12 +34,20 @@ STAFF_NEXT: dict[str, list[str]] = {
 }
 
 # Customers may cancel only before the order leaves the store.
-CUSTOMER_CAN_CANCEL_FROM = [PAID, AWAITING, PREPARING]
+CUSTOMER_CAN_CANCEL_FROM = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING]
 
-ALL = [PAID, AWAITING, PREPARING, OUT, DELIVERED, CANCELLED]
+ALL = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING, OUT, DELIVERED, CANCELLED]
 
 # Rough progress for the tracking bar (0 to 100). Cancelled has none.
-PROGRESS = {PAID: 20, AWAITING: 20, PREPARING: 45, OUT: 75, DELIVERED: 100, CANCELLED: 0}
+PROGRESS = {
+    AWAITING_PAYMENT: 5,
+    PAID: 20,
+    AWAITING: 20,
+    PREPARING: 45,
+    OUT: 75,
+    DELIVERED: 100,
+    CANCELLED: 0,
+}
 
 
 def staff_options(current: str) -> list[str]:
@@ -53,8 +67,7 @@ def progress(current: str) -> int:
 
 
 def refund_note(order: dict) -> str | None:
-    """Prepaid orders need a manual refund when cancelled. Payments are simulated
-    here, so this is a reminder for staff, not an automatic refund."""
-    if order.get("payMethod") == "before":
+    """A prepaid order that was actually paid needs a manual refund when cancelled."""
+    if order.get("payMethod") == "before" and order.get("status") != AWAITING_PAYMENT:
         return "This order was paid ahead. Arrange a refund with the customer."
     return None

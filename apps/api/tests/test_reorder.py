@@ -17,7 +17,7 @@ ORDER = {
     "items": [{"productId": "p1", "optionIndex": 1, "qty": 2}],
     "address": "12 Market Rd",
     "phone": "08022222222",
-    "city": "Ibadan",
+    "city": "Otukpo",
     "payMethod": "delivery",
 }
 

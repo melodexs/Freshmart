@@ -7,7 +7,7 @@ import {
   setCheckoutHandler,
   setDeliveryFee,
 } from "./cart";
-import { configureCheckout, initCheckout, openCheckout } from "./checkout";
+import { configureCheckout, getBank, initCheckout, openCheckout, setAreas, setBankDetails } from "./checkout";
 import { $, $maybe, clear, h, hide, money, show } from "./dom";
 import type { PlacedOrder } from "./types";
 
@@ -132,16 +132,6 @@ function showSuccessToast(text: string, ok = true): void {
   successTimer = window.setTimeout(() => (t.style.display = "none"), 2600);
 }
 
-let smsTimer: number | undefined;
-function showSmsToast(text: string): void {
-  const t = $("smsToast");
-  clear(t);
-  t.append("📩 ", h("strong", { text: "SMS sent to store" }), h("br"), text);
-  t.style.display = "block";
-  window.clearTimeout(smsTimer);
-  smsTimer = window.setTimeout(() => (t.style.display = "none"), 6000);
-}
-
 // ---------- sign in / out state, driven by HX-Trigger events from the server ----------
 
 function syncSignedIn(): void {
@@ -206,22 +196,23 @@ function initAuthEvents(): void {
 // ---------- order confirmation ----------
 
 function showOrderPlaced(order: PlacedOrder): void {
-  const items = order.items.map((i) => `${i.qty}x ${i.name}`).join(", ");
-  const payLine = order.payMethod === "before" ? "PAID (before delivery)" : "Pay on delivery";
-  showSmsToast(
-    `New order ${order.id} — ${money(order.total)}. ${items}. Deliver to: ${order.address}, ${order.city}. Customer: ${order.phone}. ${payLine}.`,
-  );
-
-  const d = order.paymentDetail as Record<string, string | undefined>;
-  let how = "You'll pay the rider on delivery.";
-  if (order.payMethod === "before") {
-    if (d.type === "card") how = `Paid ahead via card ending ${d.last4 ?? ""} (simulated).`;
-    else if (d.type === "transfer") how = `Paid ahead via transfer from ${d.bank ?? ""} (simulated).`;
-    else how = `Paid ahead via USSD via ${d.bank ?? ""} (simulated).`;
-  }
   const text = $("confirmText");
   clear(text);
-  text.append("Order ", h("strong", { text: order.id }), ` for ${money(order.total)} was placed.`, h("br"), how);
+  text.append("Order ", h("strong", { text: order.id }), ` for ${money(order.total)} was placed.`, h("br"));
+  if (order.payMethod === "before") {
+    const b = getBank();
+    text.append(
+      "It is waiting for your payment. Transfer ",
+      h("strong", { text: money(order.total) }),
+      " to ",
+      h("strong", { text: `${b.accountNumber}, ${b.bank} (${b.accountName})` }),
+      " and use ",
+      h("strong", { text: order.id }),
+      " as the narration. We start packing as soon as we confirm the money.",
+    );
+  } else {
+    text.append("You will pay the rider when your order arrives.");
+  }
   const copy = $("copyRef");
   copy.textContent = "Copy order reference";
   copy.onclick = () => {
@@ -258,8 +249,14 @@ function initBackToTop(): void {
 function init(): void {
   const cfg = $maybe("app-config")?.textContent;
   if (cfg) {
-    const parsed = JSON.parse(cfg) as { deliveryFee?: number };
+    const parsed = JSON.parse(cfg) as {
+      deliveryFee?: number;
+      areas?: { name: string; fee: number }[];
+      bank?: { bank: string; accountName: string; accountNumber: string; ready: boolean };
+    };
     if (typeof parsed.deliveryFee === "number") setDeliveryFee(parsed.deliveryFee);
+    if (parsed.areas?.length) setAreas(parsed.areas);
+    setBankDetails(parsed.bank);
   }
   syncSignedIn();
   initModals();
