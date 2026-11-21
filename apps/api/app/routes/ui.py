@@ -6,6 +6,8 @@ browser needs very little JavaScript. Every template autoescapes.
 
 from __future__ import annotations
 
+import re
+
 import bcrypt
 from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
@@ -153,6 +155,25 @@ async def product_grid(
         fav_ids=fav_ids,
         discount=catalogue.discount_percent,
         favs_only=favs == "1",
+    )
+
+
+@router.get("/media/{image_id}")
+async def media(image_id: str):
+    """A product photo uploaded by the store. Only ids we generated are served."""
+    if not re.fullmatch(r"im[0-9a-f]{16}", image_id):
+        return Response(status_code=404)
+    data = await db.get_image(image_id)
+    if data is None:
+        return Response(status_code=404)
+    return Response(
+        data,
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+        },
     )
 
 

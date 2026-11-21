@@ -45,4 +45,6 @@ list_addresses = _impl.list_addresses
 save_address = _impl.save_address
 delete_address = _impl.delete_address
 update_profile = _impl.update_profile
+save_image = _impl.save_image
+get_image = _impl.get_image
 ping = _impl.ping

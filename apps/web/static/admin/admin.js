@@ -191,7 +191,27 @@ function editor(p, done) {
   const field = (label, input) => h("div", {}, h("label", { text: label }), input);
   const bind = (k, extra = {}) => h("input", { value: f[k], oninput: (e) => (f[k] = e.target.value), ...extra });
   const msg = h("p", { class: "msg", role: "alert" });
-  const uploadHint = h("p", { class: "muted", text: "Image: paste a link that starts with https:// or /static/. File upload needs cloud storage, which is not set up yet." });
+  const preview = h("img", { class: "photo-preview", alt: "Product photo preview", hidden: !f.image, src: f.image || "" });
+  const photoMsg = h("p", { class: "muted", text: f.image ? "Photo saved with this product." : "No photo yet. A picture is drawn for the product until you add one." });
+  const fileInput = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", hidden: true, onchange: async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    photoMsg.textContent = "Uploading…";
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      let res; try { res = await fetch(API + "/images", { method: "POST", credentials: "same-origin", body: fd }); } catch { throw new Error("Cannot reach the store. Check your connection."); }
+      let data = {}; try { data = await res.json(); } catch { /* empty */ }
+      if (res.status === 401 || res.status === 403) { showLogin(); throw new Error("Please sign in again."); }
+      if (!res.ok) throw new Error(data.error || "That photo could not be uploaded.");
+      f.image = data.url; preview.src = data.url; preview.hidden = false;
+      photoMsg.textContent = `Photo uploaded (${Math.round(data.bytes / 1024)} KB). Press Save to keep it.`;
+    } catch (err) { photoMsg.textContent = err.message; }
+    e.target.value = "";
+  } });
+  const photoBox = h("div", { class: "photo-box" }, preview,
+    h("div", {}, h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+      h("button", { type: "button", class: "btn sm", onclick: () => fileInput.click(), text: "Choose photo" }),
+      h("button", { type: "button", class: "btn sm", onclick: () => { f.image = ""; preview.hidden = true; photoMsg.textContent = "Photo removed. Press Save to keep this change."; }, text: "Remove photo" })),
+      photoMsg, h("p", { class: "muted", text: "JPEG, PNG or WebP, up to 5 MB. It is resized and stored safely for you." }), fileInput));
   const form = h("form", { class: "form", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
     const body = { ...f, options: opts.map((o) => ({ label: o.label, price: o.price === "" ? "" : Number(o.price), was: o.was === "" ? "" : Number(o.was) })), stock: f.stock === "" ? null : Number(f.stock) };
@@ -201,7 +221,7 @@ function editor(p, done) {
     field("Name", bind("name", { required: true, maxlength: "80" })),
     h("div", { class: "row2" }, field("Category", bind("cat", { required: true, maxlength: "40", list: "cats" })), field("Emoji (optional)", bind("emoji", { maxlength: "8" }))),
     field("Description", h("textarea", { maxlength: "600", oninput: (e) => (f.description = e.target.value), text: f.description })),
-    field("Image link", bind("image", { placeholder: "https://… or /static/…" })), uploadHint,
+    h("div", {}, h("label", { text: "Product photo" }), photoBox),
     h("div", {}, h("label", { text: "Sizes and prices (old price is optional and shows a discount)" }), optBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (opts.length < 12) { opts.push({ label: "", price: "", was: "" }); drawOpts(); } }, text: "+ Add size" })),
     field("Stock (leave empty to not track)", bind("stock", { type: "number", min: "0" })),
     h("div", { class: "checks" },
@@ -257,7 +277,7 @@ async function settings(root) {
     inp("sName", "Store name", s.storeName, { maxlength: "80" }), inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
     inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }), inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),
     msg, h("button", { class: "btn primary", type: "submit", text: "Save settings" }),
-    h("p", { class: "muted", text: "Discount codes, image upload, online payment and SMS or WhatsApp notifications are not built yet." }));
+    h("p", { class: "muted", text: "Online payment (Paystack) and SMS or WhatsApp notifications stay off until you supply real accounts and keys." }));
   root.replaceChildren(form);
 }
 
