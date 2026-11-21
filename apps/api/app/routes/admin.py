@@ -9,10 +9,13 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, order_status
+from .. import auth, catalogue, db, images, order_status
+
+MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
 
 router = APIRouter(dependencies=[Depends(auth.require_staff)])
 
@@ -81,8 +84,12 @@ def parse_product(b: dict, existing: dict | None) -> tuple[dict | None, str | No
     if stock_raw not in (None, "") and stock is None:
         return None, "Stock must be a whole number, or left empty to not track it."
     image = clean_text(b.get("image"), 300)
-    if image and not (image.startswith("/static/") or image.startswith("https://")):
-        return None, "The image must be an uploaded file or an https link."
+    if image and not (
+        MEDIA_RE.fullmatch(image)
+        or image.startswith("/static/products/")
+        or image.startswith("https://")
+    ):
+        return None, "The image must be an uploaded photo or an https link."
     pid = existing["id"] if existing else clean_text(b.get("id"), 40).lower()
     if not existing and not ID_RE.match(pid):
         return None, "The product code can use letters, numbers, - and _ only."
@@ -400,3 +407,17 @@ async def customers():
         u = await db.get_user_by_email(email)
         out.append({**c, "name": (u or {}).get("name", "")})
     return {"customers": sorted(out, key=lambda c: -c["spent"])}
+
+
+@router.post("/images")
+async def upload_image(request: Request, file: UploadFile = File(...)):
+    """Accept one product photo. Returns the /media/ path to save on the product."""
+    raw = await file.read(images.MAX_BYTES + 1)
+    try:
+        data = await run_in_threadpool(images.process, raw)
+    except images.BadImage as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    image_id = images.new_id()
+    await db.save_image(image_id, data)
+    await db.add_audit("admin", "image_uploaded", image_id, {"bytes": len(data)})
+    return {"url": f"/media/{image_id}", "bytes": len(data)}

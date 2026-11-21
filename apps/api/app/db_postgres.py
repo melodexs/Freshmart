@@ -62,6 +62,8 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS images (
+              id TEXT PRIMARY KEY, data BYTEA NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
             CREATE TABLE IF NOT EXISTS addresses (
               id TEXT PRIMARY KEY, email TEXT NOT NULL, label TEXT NOT NULL, area TEXT NOT NULL,
               address TEXT NOT NULL, phone TEXT NOT NULL, is_default BOOLEAN NOT NULL DEFAULT FALSE,
@@ -490,3 +492,14 @@ async def delete_address(email: str, address_id: str) -> bool:
 async def update_profile(email: str, name: str, phone: str) -> None:
     async with _pool.acquire() as c:
         await c.execute("UPDATE users SET name=$2, phone=$3 WHERE email=$1", email, name, phone)
+
+
+async def save_image(image_id: str, data: bytes) -> None:
+    async with _pool.acquire() as c:
+        await c.execute("INSERT INTO images (id, data) VALUES ($1, $2)", image_id, data)
+
+
+async def get_image(image_id: str) -> bytes | None:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow("SELECT data FROM images WHERE id=$1", image_id)
+    return bytes(row["data"]) if row else None

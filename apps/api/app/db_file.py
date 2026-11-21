@@ -23,6 +23,7 @@ EMPTY = {
     "audit": [],
     "favourites": {},
     "addresses": {},
+    "images": {},
 }
 
 
@@ -344,3 +345,20 @@ async def update_profile(email: str, name: str, phone: str) -> None:
         if u:
             u["name"], u["phone"] = name, phone
             _write(data)
+
+
+async def save_image(image_id: str, data: bytes) -> None:
+    import base64
+
+    with _lock:
+        d = _read()
+        d["images"][image_id] = base64.b64encode(data).decode()
+        _write(d)
+
+
+async def get_image(image_id: str) -> bytes | None:
+    import base64
+
+    with _lock:
+        raw = _read()["images"].get(image_id)
+    return base64.b64decode(raw) if raw else None

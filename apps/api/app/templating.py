@@ -85,7 +85,9 @@ def frame_colour(product_id: str) -> str:
 
 
 def product_art(product: dict) -> Markup:
-    url = _photo_url(str(product["id"]))
+    uploaded = str(product.get("image") or "")
+    url = uploaded if re.fullmatch(r"/media/im[0-9a-f]{16}", uploaded) else None
+    url = url or _photo_url(str(product["id"]))
     if url:
         return Markup(  # noqa: S704
             '<img class="art photo" src="{}" alt="{}" loading="lazy" width="140" height="150">'

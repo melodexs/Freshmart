@@ -74,3 +74,6 @@ tr:last-child td{border-bottom:0}
   .optrow{grid-template-columns:1fr 1fr}
 }
 @media (prefers-reduced-motion:reduce){.side{transition:none}}
+.photo-box{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;border:1px dashed #c9c2ae;border-radius:10px;padding:12px}
+.photo-preview{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #e0dac8;background:#f6f2e6}
+.photo-preview[hidden]{display:none}
