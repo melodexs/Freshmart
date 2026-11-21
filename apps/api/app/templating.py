@@ -84,6 +84,13 @@ def frame_colour(product_id: str) -> str:
     return PHOTO_FRAMES.get(str(product_id), "")
 
 
+def photo_for(product: dict) -> str | None:
+    """URL of a product's real photo (an admin upload or the bundled one), or None."""
+    uploaded = str(product.get("image") or "")
+    url = uploaded if re.fullmatch(r"/media/im[0-9a-f]{16}", uploaded) else None
+    return url or _photo_url(str(product["id"]))
+
+
 def product_art(product: dict) -> Markup:
     uploaded = str(product.get("image") or "")
     url = uploaded if re.fullmatch(r"/media/im[0-9a-f]{16}", uploaded) else None
@@ -96,4 +103,5 @@ def product_art(product: dict) -> Markup:
 
 
 templates.env.filters["product_art"] = product_art
+templates.env.filters["photo_for"] = photo_for
 templates.env.filters["frame_colour"] = frame_colour

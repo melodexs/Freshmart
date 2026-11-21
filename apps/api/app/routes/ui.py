@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from .. import auth, catalogue, config, db, order_status, ratelimit
 from ..phone import whatsapp_link
-from ..templating import templates
+from ..templating import photo_for, templates
 
 router = APIRouter()
 
@@ -60,6 +60,14 @@ async def home(request: Request):
     cards = [
         {"name": n, "count": c, "emoji": CATEGORY_EMOJI.get(n, "🛒")} for n, c in counts.items()
     ]
+    # Real product photos for the hero: one per category first, so the cluster shows range.
+    picks, seen = [], set()
+    for pr in products:
+        photo = photo_for(pr)
+        if photo and pr["cat"] not in seen and pr.get("stock", 1) != 0:
+            seen.add(pr["cat"])
+            picks.append({"id": pr["id"], "name": pr["name"], "photo": photo})
+    hero_picks = picks[:4]
     shelves = [
         {
             "key": "best",
@@ -88,6 +96,8 @@ async def home(request: Request):
         categories=["All", *await catalogue.categories()],
         active="All",
         category_cards=cards,
+        product_total=len(products),
+        hero_picks=hero_picks,
         shelves=shelves,
         discount=catalogue.discount_percent,
         delivery_fee=await catalogue.delivery_fee(),
