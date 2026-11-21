@@ -54,11 +54,16 @@ async def delivery_fee() -> int:
 
 
 async def restock_order(order: dict) -> None:
-    """Put an order's items back on the shelf (used by every way an order can be cancelled)."""
+    """Put an order's items back on the shelf and give back its discount use.
+
+    Every way an order can be cancelled goes through here.
+    """
     for line in order.get("items", []):
         pid, qty = line.get("productId"), line.get("qty")
         if isinstance(pid, str) and isinstance(qty, int) and qty > 0:
             await db.adjust_stock(pid, qty)
+    if order.get("id"):
+        await db.release_discount(order["id"])
 
 
 async def bank_details() -> dict:

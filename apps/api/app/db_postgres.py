@@ -62,6 +62,12 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS discount_codes (
+              code TEXT PRIMARY KEY, rule JSONB NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS discount_uses (
+              id BIGSERIAL PRIMARY KEY, code TEXT NOT NULL, email TEXT NOT NULL, order_id TEXT NOT NULL UNIQUE,
+              amount INTEGER NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE INDEX IF NOT EXISTS discount_uses_code_idx ON discount_uses (code, email);
             CREATE TABLE IF NOT EXISTS images (
               id TEXT PRIMARY KEY, data BYTEA NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
             CREATE TABLE IF NOT EXISTS addresses (
@@ -503,3 +509,70 @@ async def get_image(image_id: str) -> bytes | None:
     async with _pool.acquire() as c:
         row = await c.fetchrow("SELECT data FROM images WHERE id=$1", image_id)
     return bytes(row["data"]) if row else None
+
+
+def _rule(r) -> dict:
+    v = r["rule"]
+    return json.loads(v) if isinstance(v, str) else v
+
+
+async def get_discount(code: str) -> dict | None:
+    async with _pool.acquire() as c:
+        r = await c.fetchrow("SELECT rule FROM discount_codes WHERE code=$1", code)
+    return _rule(r) if r else None
+
+
+async def list_discounts() -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            """SELECT d.rule, COUNT(u.id) AS used, COALESCE(SUM(u.amount),0) AS given
+               FROM discount_codes d LEFT JOIN discount_uses u ON u.code = d.code
+               GROUP BY d.code, d.rule, d.created ORDER BY d.created DESC"""
+        )
+    return [{**_rule(r), "used": r["used"], "given": int(r["given"])} for r in rows]
+
+
+async def save_discount(rule: dict) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            """INSERT INTO discount_codes (code, rule) VALUES ($1, $2::jsonb)
+               ON CONFLICT (code) DO UPDATE SET rule = EXCLUDED.rule""",
+            rule["code"],
+            json.dumps(rule),
+        )
+
+
+async def discount_usage(code: str, email: str) -> tuple[int, bool]:
+    """(times used by anyone, whether this customer has used it)."""
+    async with _pool.acquire() as c:
+        r = await c.fetchrow(
+            "SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE email=$2) AS mine FROM discount_uses WHERE code=$1",
+            code,
+            email,
+        )
+    return r["n"], r["mine"] > 0
+
+
+async def claim_discount(rule: dict, email: str, order_id: str, amount: int) -> bool:
+    """Record a use only if the limits still hold, in one statement, so two orders cannot both
+    take the last use. Returns False when the code ran out or this customer already used it."""
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """INSERT INTO discount_uses (code, email, order_id, amount)
+               SELECT $1, $2, $3, $4
+               WHERE ($5::int IS NULL OR (SELECT COUNT(*) FROM discount_uses WHERE code=$1) < $5::int)
+                 AND (NOT $6::boolean OR NOT EXISTS (SELECT 1 FROM discount_uses WHERE code=$1 AND email=$2))""",
+            rule["code"],
+            email,
+            order_id,
+            amount,
+            rule.get("maxUses"),
+            bool(rule.get("perCustomerOnce")),
+        )
+    return res.endswith(" 1")
+
+
+async def release_discount(order_id: str) -> None:
+    """A cancelled order gives its use back."""
+    async with _pool.acquire() as c:
+        await c.execute("DELETE FROM discount_uses WHERE order_id=$1", order_id)

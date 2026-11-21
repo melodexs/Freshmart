@@ -24,6 +24,8 @@ EMPTY = {
     "favourites": {},
     "addresses": {},
     "images": {},
+    "discounts": {},
+    "discountUses": [],
 }
 
 
@@ -362,3 +364,53 @@ async def get_image(image_id: str) -> bytes | None:
     with _lock:
         raw = _read()["images"].get(image_id)
     return base64.b64decode(raw) if raw else None
+
+
+async def get_discount(code: str) -> dict | None:
+    with _lock:
+        return _read()["discounts"].get(code)
+
+
+async def list_discounts() -> list[dict]:
+    with _lock:
+        d = _read()
+    out = []
+    for rule in d["discounts"].values():
+        uses = [u for u in d["discountUses"] if u["code"] == rule["code"]]
+        out.append({**rule, "used": len(uses), "given": sum(u["amount"] for u in uses)})
+    return out
+
+
+async def save_discount(rule: dict) -> None:
+    with _lock:
+        d = _read()
+        d["discounts"][rule["code"]] = rule
+        _write(d)
+
+
+async def discount_usage(code: str, email: str) -> tuple[int, bool]:
+    with _lock:
+        uses = [u for u in _read()["discountUses"] if u["code"] == code]
+    return len(uses), any(u["email"] == email for u in uses)
+
+
+async def claim_discount(rule: dict, email: str, order_id: str, amount: int) -> bool:
+    with _lock:
+        d = _read()
+        uses = [u for u in d["discountUses"] if u["code"] == rule["code"]]
+        if rule.get("maxUses") and len(uses) >= rule["maxUses"]:
+            return False
+        if rule.get("perCustomerOnce") and any(u["email"] == email for u in uses):
+            return False
+        d["discountUses"].append(
+            {"code": rule["code"], "email": email, "orderId": order_id, "amount": amount}
+        )
+        _write(d)
+        return True
+
+
+async def release_discount(order_id: str) -> None:
+    with _lock:
+        d = _read()
+        d["discountUses"] = [u for u in d["discountUses"] if u["orderId"] != order_id]
+        _write(d)
