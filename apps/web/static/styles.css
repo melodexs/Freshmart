@@ -404,3 +404,161 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .tl-done .tl-label,.tl-current .tl-label{color:#1c2420}
 .tl-current .tl-label{color:#8a5200}
 .tl-text small{font-size:.76rem;color:#6b7a70;margin-top:1px}
+
+/* ================= storefront redesign ================= */
+.toast{position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:80; background:var(--green-900); color:#fff; padding:11px 18px; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:90vw; font-size:.92rem;}
+.toast-ok{background:var(--green-700);}
+.account-area{display:flex; align-items:center; gap:8px;}
+
+/* top navigation */
+.mainnav{display:none; gap:4px; margin-left:18px;}
+.mainnav a{color:var(--cream); text-decoration:none; padding:8px 12px; border-radius:10px; font-size:.92rem; font-weight:600; opacity:.9;}
+.mainnav a:hover{background:rgba(255,255,255,.1); opacity:1;}
+@media (min-width:900px){.mainnav{display:flex;}}
+
+/* search and filter row */
+.price-filter{display:flex; gap:6px; flex:none;}
+.price-filter input{width:92px; padding:10px 10px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fff;}
+.chip{border:1px solid var(--line); background:#fff; color:var(--green-900); border-radius:999px; padding:9px 14px; font-weight:600; font-size:.88rem; cursor:pointer; white-space:nowrap; min-height:42px;}
+.chip:hover,.chip[aria-pressed="true"]{background:var(--green-900); color:#fff; border-color:var(--green-900);}
+@media (max-width:640px){.price-filter input{width:76px}}
+
+/* hero */
+.hero-cta{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
+.hero-btn{display:inline-block; text-decoration:none; text-align:center; padding:13px 22px; font-weight:700; min-height:46px;}
+.btn-ghost.light{background:transparent; color:#fff; border:2px solid rgba(255,255,255,.7);}
+.btn-ghost.light:hover{background:rgba(255,255,255,.12);}
+
+/* category cards */
+#categories,#offers,.trust,.faq,.contact{margin-top:34px;}
+.cat-cards{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+.cat-card{display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:left; background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px 14px; cursor:pointer; min-height:104px; transition:border-color .15s, box-shadow .15s, transform .15s;}
+.cat-card:hover,.cat-card:focus-visible{border-color:var(--ochre); box-shadow:0 8px 22px rgba(18,40,29,.12); transform:translateY(-2px);}
+.cat-ico{font-size:1.9rem; line-height:1;}
+.cat-card strong{font-family:Georgia,serif; font-size:1rem; color:var(--green-900);}
+.cat-card small{color:#6b6b5e; font-size:.8rem;}
+@media (min-width:560px){.cat-cards{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:900px){.cat-cards{grid-template-columns:repeat(4,1fr)}}
+
+/* shelves (best sellers, offers, new arrivals, featured) */
+.shelf-block{margin-bottom:26px;}
+.shelf-row{display:flex; gap:12px; overflow-x:auto; padding:4px 2px 12px; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch;}
+.mini-card{flex:none; width:148px; display:flex; flex-direction:column; gap:6px; text-decoration:none; color:inherit; background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:10px; scroll-snap-align:start;}
+.mini-card:hover{border-color:var(--ochre); box-shadow:0 6px 18px rgba(18,40,29,.12);}
+.mini-card .thumb{height:104px; border-radius:10px; overflow:hidden;}
+.mini-name{font-weight:600; font-size:.88rem; line-height:1.25; min-height:2.5em;}
+.mini-price{font-weight:800; color:var(--green-900); font-size:.95rem;}
+.mini-price s,.was{color:#8a8a7c; font-weight:500; font-size:.82rem; margin-left:4px;}
+.btn-link{background:none; border:0; color:var(--green-700); font-weight:700; cursor:pointer; text-decoration:underline; padding:4px;}
+
+/* discount badges, hearts, stock */
+.card{position:relative;}
+.off-badge{display:inline-block; background:var(--danger); color:#fff; font-size:.72rem; font-weight:800; padding:3px 8px; border-radius:999px; letter-spacing:.2px;}
+.off-badge.corner{position:absolute; top:10px; left:10px; z-index:2;}
+.fav-slot{position:absolute; top:6px; right:6px; z-index:2;}
+.fav{background:rgba(255,255,255,.92); border:1px solid var(--line); width:40px; height:40px; border-radius:50%; font-size:1.25rem; line-height:1; cursor:pointer; color:#7b7b6c; display:grid; place-items:center;}
+.fav:hover{color:var(--danger); border-color:var(--danger);}
+.fav.on{color:var(--danger); background:#fff;}
+.thumb-link{display:block; text-decoration:none;}
+.card h3 a{text-decoration:none; color:inherit;}
+.card h3 a:hover{text-decoration:underline;}
+.stock-note.ok{color:var(--green-700);}
+
+/* product page */
+.pdp{padding-top:14px; padding-bottom:24px;}
+.crumbs{font-size:.84rem; color:#6b6b5e; margin:6px 0 14px;}
+.crumbs a{color:var(--green-700); text-decoration:none;}
+.crumbs a:hover{text-decoration:underline;}
+.pdp-grid{display:block;}
+.pdp-card{display:flex; flex-direction:column; gap:18px; padding:18px; border-radius:18px;}
+.pdp-media .thumb{height:auto; aspect-ratio:1/1; border-radius:14px; overflow:hidden; max-height:420px;}
+.pdp-info{display:flex; flex-direction:column; gap:10px;}
+.pdp-top{display:flex; align-items:center; justify-content:space-between;}
+.pdp-top .fav{position:static;}
+.pill-cat{background:var(--cream); border:1px solid var(--line); color:var(--green-900); font-size:.78rem; font-weight:700; padding:4px 11px; border-radius:999px;}
+.pdp-info h1{font-size:1.7rem; margin:0;}
+.pdp-desc{margin:0; color:#4a4a3f;}
+.pdp-label{font-weight:700; font-size:.85rem;}
+.pdp-info .opt-select{max-width:260px;}
+.pdp-price-row{display:flex; align-items:center; gap:10px; justify-content:flex-start;}
+.pdp-price-row .price{font-size:1.9rem;}
+.pdp-points{list-style:none; padding:0; margin:6px 0 0; display:grid; gap:4px; color:#4a4a3f; font-size:.9rem;}
+.pdp-points li::before{content:"✓"; color:var(--green-700); font-weight:800; margin-right:8px;}
+.pdp-ask{display:inline-block; text-decoration:none; text-align:center; margin-top:6px;}
+.pdp-related{margin-top:30px;}
+.pdp-related h2{font-size:1.2rem;}
+.pdp-related .grid{grid-template-columns:repeat(2,1fr);}
+.rel-card{text-decoration:none; color:inherit; padding:10px; gap:6px;}
+@media (min-width:760px){
+  .pdp-card{flex-direction:row; gap:34px; padding:26px;}
+  .pdp-media{flex:0 0 44%;}
+  .pdp-info{flex:1; padding-top:6px;}
+  .pdp-info h1{font-size:2.1rem;}
+  .pdp-related .grid{grid-template-columns:repeat(4,1fr);}
+}
+
+/* trust, FAQ, contact */
+.trust-grid{display:grid; grid-template-columns:1fr; gap:12px;}
+.trust-grid>div{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px; display:flex; flex-direction:column; gap:4px;}
+.trust-grid strong{font-family:Georgia,serif; color:var(--green-900);}
+.trust-grid span{color:#4a4a3f; font-size:.92rem;}
+@media (min-width:640px){.trust-grid{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:960px){.trust-grid{grid-template-columns:repeat(5,1fr)}}
+.faq details{background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:8px; padding:0 16px;}
+.faq summary{cursor:pointer; font-weight:700; padding:14px 0; color:var(--green-900); list-style:none; display:flex; justify-content:space-between; gap:10px;}
+.faq summary::after{content:"+"; font-weight:800; color:var(--ochre-dark);}
+.faq details[open] summary::after{content:"–";}
+.faq summary::-webkit-details-marker{display:none;}
+.faq details p{margin:0 0 14px; color:#4a4a3f;}
+.contact{background:var(--green-900); color:#fff; border-radius:18px; padding:26px 22px; margin-bottom:10px;}
+.contact h2{color:#fff;}
+.contact p{margin:0 0 14px; opacity:.9;}
+.contact-actions{display:flex; gap:10px; flex-wrap:wrap;}
+.contact-actions .btn-ghost{background:transparent; color:#fff; border:2px solid rgba(255,255,255,.7); padding:12px 20px; border-radius:12px; font-weight:700;}
+.contact-actions .btn-primary{padding:12px 20px; border-radius:12px;}
+
+/* ---- layout fixes found by measuring ---- */
+/* The search row now holds search, sort, price range and favourites, so it must wrap. */
+.search{flex-wrap:wrap; gap:8px; align-items:center;}
+.search #searchInput{flex:1 1 220px; min-width:0; width:auto;}
+.search .sort-select{margin-left:0; flex:0 1 auto;}
+@media (max-width:520px){
+  .search #searchInput{flex-basis:100%;}
+  .search .sort-select{flex:1 1 40%; min-height:42px;}
+  .price-filter{flex:1 1 100%;}
+  .price-filter input{flex:1; width:auto; min-height:42px;}
+  .chip{flex:none;}
+}
+/* Desktop: the nav links need room, so the logo shrinks and the buttons stay inside the screen. */
+@media (min-width:900px){
+  .topbar{gap:8px; flex-wrap:nowrap;}
+  .mainnav{margin-left:8px; gap:0;}
+  .mainnav a{padding:8px 9px; font-size:.88rem;}
+  .logo-full{display:none;}
+  .logo-abbr{display:inline;}
+  .icon-btn{padding:8px 8px; font-size:.88rem;}
+}
+@media (min-width:1180px){.logo-full{display:inline;}}
+/* Comfortable tap targets on touch screens (at least 40px), without a taller header. */
+@media (max-width:899px){
+  .topbar .icon-btn{min-height:40px;}
+  .add-btn{min-height:42px; padding:10px 18px;}
+  .opt-select,.pdp-info .opt-select{min-height:42px;}
+  .link-btn,.btn-link{min-height:40px; display:inline-flex; align-items:center;}
+  nav.cats button{min-height:38px;}
+  .stepper button{min-width:42px; min-height:42px;}
+}
+/* Number inputs have a wide built-in minimum; let them shrink so the row fits the screen. */
+.price-filter,.price-filter input,.search .sort-select,.chip{min-width:0;}
+@media (max-width:520px){
+  .search .sort-select{flex:1 1 0;}
+  .price-filter{flex:1 1 0;}
+  .search #searchInput{min-height:44px;}
+}
+/* Phones: sort and favourites share a line; the price range gets a full line so it is readable. */
+@media (max-width:520px){
+  .price-filter{order:5; flex:1 1 100%;}
+  .search .sort-select{flex:1 1 0; order:3;}
+  .chip{order:4;}
+}
+.sort-select{min-height:40px;}
