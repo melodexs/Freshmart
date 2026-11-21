@@ -6,9 +6,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, db, order_status
+from .. import auth, catalogue, db, order_status
 from ..phone import normalise as normalise_phone
-from ..products import DELIVERY_FEE, find_option
 
 router = APIRouter()
 
@@ -62,10 +61,11 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
     # Rebuild every line from the server catalog; prices from the browser
     # are never trusted.
     lines = []
+    wanted: dict[str, int] = {}
     for raw in items:
         if not isinstance(raw, dict):
             return err(400, "One of the items in your cart is no longer available.")
-        found = find_option(raw.get("productId"), raw.get("optionIndex"))
+        found = await catalogue.find_option(raw.get("productId"), raw.get("optionIndex"))
         if not found:
             return err(400, "One of the items in your cart is no longer available.")
         product, option = found
@@ -76,6 +76,11 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
             qty = int(qty)
         if not isinstance(qty, int) or isinstance(qty, bool) or qty <= 0 or qty > MAX_QTY:
             return err(400, f"Invalid quantity for {product['name']}.")
+        stock = product.get("stock")
+        wanted[product["id"]] = wanted.get(product["id"], 0) + qty
+        if stock is not None and wanted[product["id"]] > stock:
+            left = f"only {stock} left" if stock > 0 else "out of stock"
+            return err(409, f"Sorry, {product['name']} is {left}.")
         lines.append(
             {
                 "name": f"{product['name']} ({option['label']})",
@@ -89,7 +94,8 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         )
 
     subtotal = sum(line["price"] * line["qty"] for line in lines)
-    total = subtotal + DELIVERY_FEE
+    delivery_fee = await catalogue.delivery_fee()
+    total = subtotal + delivery_fee
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     city_s = str(city) if city else ""
 
@@ -98,7 +104,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "date": now,
         "items": lines,
         "subtotal": subtotal,
-        "deliveryFee": DELIVERY_FEE,
+        "deliveryFee": delivery_fee,
         "total": total,
         "address": str(address),
         "phone": clean_phone,
@@ -108,7 +114,21 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }
-    await db.add_order(order)
+    # Reserve stock first, in one conditional statement per product, so two customers
+    # cannot both buy the last item. If any product cannot be reserved, give back what we took.
+    reserved: list[tuple[str, int]] = []
+    for product_id, qty in wanted.items():
+        if not await db.reserve_stock(product_id, qty):
+            for pid, q in reserved:
+                await db.adjust_stock(pid, q)
+            return err(409, "Sorry, one of the items just sold out. Please check your cart.")
+        reserved.append((product_id, qty))
+    try:
+        await db.add_order(order)
+    except Exception:
+        for pid, q in reserved:
+            await db.adjust_stock(pid, q)
+        raise
 
     # Simulated store SMS (see README: real SMS needs a gateway such as Termii).
     summary = ", ".join(f"{line['qty']}x {line['name']}" for line in lines)

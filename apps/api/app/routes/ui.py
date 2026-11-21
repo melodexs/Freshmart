@@ -11,13 +11,11 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response
 
-from .. import auth, config, db, order_status, products, ratelimit
+from .. import auth, catalogue, config, db, order_status, ratelimit
 from ..phone import whatsapp_link
 from ..templating import templates
 
 router = APIRouter()
-
-CATEGORIES = ["All", *dict.fromkeys(p["cat"] for p in products.PRODUCTS)]
 
 
 def _first_name(user: dict | None) -> str:
@@ -45,9 +43,9 @@ async def home(request: Request):
     return _render(
         request,
         "index.html",
-        categories=CATEGORIES,
+        categories=["All", *await catalogue.categories()],
         active="All",
-        delivery_fee=products.DELIVERY_FEE,
+        delivery_fee=await catalogue.delivery_fee(),
         whatsapp=whatsapp_link(config.WHATSAPP_NUMBER, "Hello! I have a question about my order."),
     )
 
@@ -55,9 +53,10 @@ async def home(request: Request):
 @router.get("/ui/products", response_class=HTMLResponse)
 async def product_grid(request: Request, cat: str = "All", q: str = "", sort: str = "default"):
     q_norm = q.strip().lower()[:60]
+    categories = ["All", *await catalogue.categories()]
     items = [
         p
-        for p in products.PRODUCTS
+        for p in await catalogue.all_products()
         if (cat == "All" or p["cat"] == cat) and q_norm in p["name"].lower()
     ]
     # Price sorting uses each product's smallest size, which is the "from" price shoppers see first.
@@ -71,8 +70,8 @@ async def product_grid(request: Request, cat: str = "All", q: str = "", sort: st
         request,
         "partials/products.html",
         products=items,
-        categories=CATEGORIES,
-        active=cat if cat in CATEGORIES else "All",
+        categories=categories,
+        active=cat if cat in categories else "All",
     )
     return resp
 

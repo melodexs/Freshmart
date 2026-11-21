@@ -13,7 +13,12 @@
       <div class="unit">{{ p.options[0].label }}</div>
     {% endif %}
     <div class="row"><div class="price">{{ p.options[0].price|naira }}</div></div>
-    <div class="qtyArea"></div>
+    {% if p.stock is not none and p.stock <= 0 %}
+      <div class="stock-note sold-out">Out of stock</div>
+    {% else %}
+      {% if p.stock is not none and p.stock <= 5 %}<div class="stock-note low">Only {{ p.stock }} left</div>{% endif %}
+      <div class="qtyArea"></div>
+    {% endif %}
     <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "options": p.options}|tojson }}</script>
   </div>
 {% else %}

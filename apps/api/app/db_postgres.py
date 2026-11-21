@@ -52,6 +52,18 @@ async def init() -> None:
               user_email TEXT NOT NULL REFERENCES users(email));
             CREATE TABLE IF NOT EXISTS store_sms (
               id TEXT NOT NULL, text TEXT NOT NULL, date TIMESTAMPTZ NOT NULL);
+            CREATE TABLE IF NOT EXISTS categories (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, sort INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS products (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+              emoji TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
+              image TEXT NOT NULL DEFAULT '', options JSONB NOT NULL,
+              compare_prices JSONB NOT NULL DEFAULT '[]'::jsonb,
+              stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
+              featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
+              updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS settings (
+              key TEXT PRIMARY KEY, value JSONB NOT NULL);
             """
         )
 
@@ -200,3 +212,118 @@ async def ping() -> None:
     """Cheap liveness check: one trivial query, no matter how many orders exist."""
     async with _pool.acquire() as c:
         await c.fetchval("SELECT 1")
+
+
+# ---------- catalogue ----------
+
+
+def _product(r) -> dict:
+    opts, cmp_ = r["options"], r["compare_prices"]
+    return {
+        "id": r["id"],
+        "name": r["name"],
+        "cat": r["category"],
+        "emoji": r["emoji"],
+        "description": r["description"],
+        "image": r["image"],
+        "options": json.loads(opts) if isinstance(opts, str) else opts,
+        "comparePrices": json.loads(cmp_) if isinstance(cmp_, str) else cmp_,
+        "stock": r["stock"],
+        "active": r["active"],
+        "featured": r["featured"],
+        "sort": r["sort"],
+    }
+
+
+async def list_products(include_inactive: bool = False) -> list[dict]:
+    async with _pool.acquire() as c:
+        q = "SELECT * FROM products"
+        if not include_inactive:
+            q += " WHERE active"
+        rows = await c.fetch(q + " ORDER BY sort, name")
+    return [_product(r) for r in rows]
+
+
+async def get_product(product_id: str) -> dict | None:
+    async with _pool.acquire() as c:
+        r = await c.fetchrow("SELECT * FROM products WHERE id=$1", product_id)
+    return _product(r) if r else None
+
+
+async def save_product(p: dict) -> None:
+    """Insert or replace a whole product."""
+    async with _pool.acquire() as c:
+        await c.execute(
+            """INSERT INTO products (id,name,category,emoji,description,image,options,
+                 compare_prices,stock,active,featured,sort,updated)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now())
+               ON CONFLICT (id) DO UPDATE SET name=$2, category=$3, emoji=$4, description=$5,
+                 image=$6, options=$7::jsonb, compare_prices=$8::jsonb, stock=$9, active=$10,
+                 featured=$11, sort=$12, updated=now()""",
+            p["id"],
+            p["name"],
+            p["cat"],
+            p.get("emoji", ""),
+            p.get("description", ""),
+            p.get("image", ""),
+            json.dumps(p["options"]),
+            json.dumps(p.get("comparePrices") or []),
+            p.get("stock"),
+            bool(p.get("active", True)),
+            bool(p.get("featured", False)),
+            int(p.get("sort", 0)),
+        )
+
+
+async def delete_product(product_id: str) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute("DELETE FROM products WHERE id=$1", product_id)
+    return res.endswith(" 1")
+
+
+async def count_products() -> int:
+    async with _pool.acquire() as c:
+        return await c.fetchval("SELECT count(*) FROM products")
+
+
+async def adjust_stock(product_id: str, delta: int) -> int | None:
+    """Add delta to a tracked stock count, never below zero. Returns the new count, or
+    None when the product does not track stock (stock is NULL) or does not exist."""
+    async with _pool.acquire() as c:
+        return await c.fetchval(
+            """UPDATE products SET stock = GREATEST(stock + $2, 0), updated=now()
+               WHERE id=$1 AND stock IS NOT NULL RETURNING stock""",
+            product_id,
+            delta,
+        )
+
+
+async def get_setting(key: str, default=None):
+    async with _pool.acquire() as c:
+        v = await c.fetchval("SELECT value FROM settings WHERE key=$1", key)
+    if v is None:
+        return default
+    return json.loads(v) if isinstance(v, str) else v
+
+
+async def set_setting(key: str, value) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            """INSERT INTO settings (key,value) VALUES ($1,$2::jsonb)
+               ON CONFLICT (key) DO UPDATE SET value=$2::jsonb""",
+            key,
+            json.dumps(value),
+        )
+
+
+async def reserve_stock(product_id: str, qty: int) -> bool:
+    """Take qty off a tracked product only if enough is left, in one statement, so two
+    orders for the last item cannot both succeed. Untracked products (stock NULL) always pass."""
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """UPDATE products SET stock = stock - $2, updated=now()
+               WHERE id=$1 AND (stock IS NULL OR stock >= $2)""",
+            product_id,
+            qty,
+        )
+    return res.endswith(" 1")
