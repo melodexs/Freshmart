@@ -9,7 +9,7 @@ from __future__ import annotations
 import bcrypt
 from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from .. import auth, catalogue, config, db, order_status, ratelimit
 from ..phone import whatsapp_link
@@ -154,6 +154,13 @@ async def product_grid(
         discount=catalogue.discount_percent,
         favs_only=favs == "1",
     )
+
+
+@router.get("/account", response_class=HTMLResponse)
+async def account_page(request: Request):
+    if not auth.current_user(request):
+        return RedirectResponse("/?signin=1", status_code=303)
+    return _render(request, "account.html", areas=await catalogue.delivery_areas())
 
 
 @router.get("/product/{product_id}", response_class=HTMLResponse)

@@ -1,8 +1,6 @@
 {# Header account buttons. Re-rendered after sign in / sign out. #}
 {% if user %}
-  <button class="icon-btn" id="accountBtn" type="button"
-          hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML"
-          data-open-modal="ordersOverlay">👤 <span id="accountLabel">{{ user.name.split(' ')[0] }}</span></button>
+  <a class="icon-btn" id="accountBtn" href="/account">👤 <span id="accountLabel">{{ user.name.split(' ')[0] }}</span></a>
   <button class="icon-btn" id="logoutBtn" type="button"
           hx-post="/ui/logout" hx-target="#account-area" hx-swap="innerHTML">⎋ Sign out</button>
 {% else %}

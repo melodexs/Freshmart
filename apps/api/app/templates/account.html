@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}My account — Okwui&#39;s Grocery Store (OGS){% endblock %}
+{% block body %}
+<header>
+  <div class="topbar">
+    <a class="logo" href="/" aria-label="Okwui&#39;s Grocery Store (OGS) home"><span class="logo-full">Okwui&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></a>
+    <div class="topbar-spacer"></div>
+    <a class="icon-btn" href="/">🛍 Continue shopping</a>
+    <button class="icon-btn" id="acctLogout" type="button">⎋ Sign out</button>
+  </div>
+</header>
+<main class="wrap acct" id="catalog" data-areas='{{ areas|tojson|forceescape }}'>
+  <h1 class="acct-title">My account</h1>
+  <div id="acctNotice" class="msg" role="status" hidden></div>
+  <nav class="acct-tabs" role="tablist" aria-label="Account sections">
+    <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button type="button" role="tab" data-tab="orders" aria-selected="false">Orders</button>
+    <button type="button" role="tab" data-tab="addresses" aria-selected="false">Addresses</button>
+    <button type="button" role="tab" data-tab="favourites" aria-selected="false">Favourites</button>
+    <button type="button" role="tab" data-tab="profile" aria-selected="false">Profile</button>
+  </nav>
+
+  <section class="acct-panel" id="tab-overview" role="tabpanel">
+    <div class="acct-stats">
+      <div class="stat"><span>Orders placed</span><strong id="stOrders">–</strong></div>
+      <div class="stat"><span>Total spent</span><strong id="stSpent">–</strong></div>
+      <div class="stat"><span>Saved addresses</span><strong id="stAddr">–</strong></div>
+      <div class="stat"><span>Favourites</span><strong id="stFavs">–</strong></div>
+    </div>
+    <p class="acct-hello" id="helloLine"></p>
+    <div class="acct-actions"><a class="btn-primary hero-btn" href="/">Shop now</a><button class="btn-ghost" type="button" data-goto="orders">View my orders</button></div>
+  </section>
+
+  <section class="acct-panel" id="tab-orders" role="tabpanel" hidden>
+    <div id="ordersHost" hx-get="/ui/orders" hx-trigger="load" hx-swap="innerHTML"><div class="empty-note">Loading your orders…</div></div>
+  </section>
+
+  <section class="acct-panel" id="tab-addresses" role="tabpanel" hidden>
+    <div id="addrList"></div>
+    <form id="addrForm" class="acct-form" novalidate>
+      <h2 id="addrFormTitle">Add a delivery address</h2>
+      <input type="hidden" id="addrId">
+      <label>Label <input id="addrLabel" maxlength="30" placeholder="Home, Work…" autocomplete="off"></label>
+      <label>Delivery area <select id="addrArea" required></select></label>
+      <label>Full address <textarea id="addrAddress" rows="2" maxlength="200" required placeholder="House number, street, landmark"></textarea></label>
+      <label>Phone for this address <input id="addrPhone" type="tel" inputmode="tel" required placeholder="0801 234 5678"></label>
+      <label class="check"><input id="addrDefault" type="checkbox"> Make this my default address</label>
+      <div class="acct-actions"><button class="btn-primary" type="submit" id="addrSave">Save address</button><button class="btn-ghost" type="button" id="addrCancel" hidden>Cancel</button></div>
+    </form>
+  </section>
+
+  <section class="acct-panel" id="tab-favourites" role="tabpanel" hidden>
+    <div id="favHost" class="acct-favs"></div>
+  </section>
+
+  <section class="acct-panel" id="tab-profile" role="tabpanel" hidden>
+    <form id="profileForm" class="acct-form" novalidate>
+      <h2>Your details</h2>
+      <label>Full name <input id="pfName" maxlength="80" required autocomplete="name"></label>
+      <label>Email <input id="pfEmail" type="email" disabled aria-describedby="emailHelp"></label>
+      <small id="emailHelp">Your email is your sign-in and can't be changed here.</small>
+      <label>Phone number <input id="pfPhone" type="tel" inputmode="tel" required autocomplete="tel"></label>
+      <div class="acct-actions"><button class="btn-primary" type="submit">Save changes</button></div>
+    </form>
+    <form id="passwordForm" class="acct-form" novalidate>
+      <h2>Change password</h2>
+      <label>Current password <input id="pwCurrent" type="password" autocomplete="current-password" required></label>
+      <label>New password <input id="pwNew" type="password" autocomplete="new-password" minlength="6" required></label>
+      <label>Confirm new password <input id="pwConfirm" type="password" autocomplete="new-password" required></label>
+      <div class="acct-actions"><button class="btn-primary" type="submit">Change password</button></div>
+    </form>
+  </section>
+</main>
+{% include "partials/site_footer.html" %}
+{% endblock %}
+{% block scripts %}<script src="/static/vendor/htmx.min.js"></script><script src="/static/js/account.js" defer></script>{% endblock %}

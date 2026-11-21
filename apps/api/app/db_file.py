@@ -22,6 +22,7 @@ EMPTY = {
     "settings": {},
     "audit": [],
     "favourites": {},
+    "addresses": {},
 }
 
 
@@ -300,3 +301,46 @@ async def popularity() -> dict[str, int]:
             if i.get("productId"):
                 out[i["productId"]] = out.get(i["productId"], 0) + int(i.get("qty", 0))
     return out
+
+
+async def list_addresses(email: str) -> list[dict]:
+    with _lock:
+        rows = list(_read()["addresses"].get(email, []))
+    return sorted(rows, key=lambda a: not a["isDefault"])
+
+
+async def save_address(email: str, a: dict) -> None:
+    with _lock:
+        data = _read()
+        rows = data["addresses"].setdefault(email, [])
+        if a["isDefault"]:
+            for r in rows:
+                r["isDefault"] = False
+        for i, r in enumerate(rows):
+            if r["id"] == a["id"]:
+                rows[i] = a
+                break
+        else:
+            rows.append(a)
+        _write(data)
+
+
+async def delete_address(email: str, address_id: str) -> bool:
+    with _lock:
+        data = _read()
+        rows = data["addresses"].get(email, [])
+        kept = [r for r in rows if r["id"] != address_id]
+        if len(kept) == len(rows):
+            return False
+        data["addresses"][email] = kept
+        _write(data)
+        return True
+
+
+async def update_profile(email: str, name: str, phone: str) -> None:
+    with _lock:
+        data = _read()
+        u = data["users"].get(email)
+        if u:
+            u["name"], u["phone"] = name, phone
+            _write(data)
