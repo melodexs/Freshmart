@@ -1,16 +1,5 @@
 {# Modal shells. Content for sign in / sign up / orders / store inbox is filled in by HTMX;
-   cart + checkout + card simulation are driven by the TypeScript in apps/web/src. #}
-<div class="modal-overlay" id="storeInboxOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="storeTitle">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h2 id="storeTitle">Store SMS inbox</h2>
-      <button class="close-x" type="button" data-close-modal>✕</button>
-    </div>
-    <div class="small-note">This simulates what the store's phone (+234 800 000 0000) would receive by SMS whenever an order comes in. A real deployment sends these through Termii or Africa's Talking from your server, not from the browser.</div>
-    <div id="storeInboxList" style="margin-top:10px;"></div>
-  </div>
-</div>
-
+   cart + checkout are driven by the TypeScript in apps/web/src. #}
 <div class="overlay" id="cartOverlay"></div>
 <aside class="drawer" id="cartDrawer">
   <div class="drawer-head">
@@ -45,71 +34,48 @@
 
 <!-- checkout modal -->
 <div class="modal-overlay" id="checkoutOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
+  <div class="modal checkout" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+    <div class="co-head">
       <h2 id="checkoutTitle">Checkout</h2>
-      <button class="close-x" id="closeCheckout">✕</button>
+      <button class="close-x" id="closeCheckout" type="button" aria-label="Close checkout">✕</button>
     </div>
-    <div class="tab-row">
-      <button id="tabReview" class="active">1. Review order</button>
-      <button id="tabPlace">2. Place order</button>
-    </div>
-    <div id="stepReview"></div>
-    <div id="stepPlace" style="display:none;">
-    <div id="checkoutMsg"></div>
-    <div class="field"><label>Delivery address</label><input id="coAddress" placeholder="House no., street, area"></div>
-    <div class="field"><label>Delivery town</label>
-      <select id="coCity"><option>Otukpo, Benue State</option></select>
-    </div>
-    <div class="field"><label>Phone number</label><input id="coPhone" placeholder="0801 234 5678"></div>
+    <ol class="co-steps" id="coSteps" aria-label="Checkout progress">
+      <li data-step="1" class="on"><span>1</span> Your details</li>
+      <li data-step="2"><span>2</span> Delivery</li>
+      <li data-step="3"><span>3</span> Payment</li>
+    </ol>
+    <div id="checkoutMsg" role="alert"></div>
 
-    <label style="display:block;font-size:.85rem;font-weight:600;margin:14px 0 8px;">Payment method</label>
-    <div class="pay-option" data-val="delivery" id="optDelivery">
-      <input type="radio" name="pay" value="delivery">
-      <div><div class="t">Pay on delivery</div><div class="d">Pay cash or by card/transfer to the rider when your order arrives.</div></div>
-    </div>
-    <div class="pay-option" data-val="before" id="optBefore">
-      <input type="radio" name="pay" value="before">
-      <div><div class="t">Pay before delivery</div><div class="d">Card, bank transfer or USSD — order is confirmed once payment clears.</div></div>
-    </div>
+    <section id="coStep1" class="co-pane">
+      <div id="stepReview"></div>
+      <div class="field"><label for="coName">Full name</label><input id="coName" autocomplete="name" placeholder="Your full name"></div>
+      <div class="field"><label for="coPhone">Phone number</label><input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0801 234 5678"></div>
+      <button class="btn-primary" id="coNext1" type="button">Continue to delivery</button>
+    </section>
 
-    <div id="beforePayPanel" style="display:none;">
-      <div class="tab-row" style="margin-top:6px;">
-        <button id="payTabCard" class="active">Card</button>
-        <button id="payTabTransfer">Bank transfer</button>
-        <button id="payTabUssd">USSD</button>
-      </div>
-      <div id="payCardPanel">
-        <div class="field"><label>Card number</label><input id="cardNumber" placeholder="4111 1111 1111 1111"></div>
-        <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1;"><label>Expiry</label><input id="cardExpiry" placeholder="MM/YY"></div>
-          <div class="field" style="flex:1;"><label>CVV</label><input id="cardCvv" placeholder="123"></div>
-        </div>
-      </div>
-      <div id="payTransferPanel" style="display:none;">
-        <label style="display:block;font-size:.82rem;margin-bottom:6px;opacity:.8;">Select your bank or microfinance bank</label>
-        <div class="bank-list" id="bankList"></div>
-      </div>
-      <div id="payUssdPanel" style="display:none;">
-        <div class="field"><label>Select your bank for a USSD code</label>
-          <select id="ussdBank">
-            <option>GTBank</option><option>Access Bank</option><option>Zenith Bank</option><option>UBA</option><option>First Bank</option>
-          </select>
-        </div>
-        <div class="small-note" id="ussdCodeNote"></div>
-      </div>
-      <div class="small-note">This demo simulates the payment step. A real deployment routes this through a licensed Nigerian payment aggregator (e.g. Paystack or Flutterwave), which is what actually connects the checkout to commercial banks and microfinance banks — no card, transfer or account details here are sent anywhere or charged.</div>
-    </div>
+    <section id="coStep2" class="co-pane" hidden>
+      <div class="field"><label for="coArea">Delivery area</label><select id="coArea"></select></div>
+      <div class="field"><label for="coAddress">Delivery address</label><input id="coAddress" autocomplete="street-address" placeholder="House no., street, landmark"></div>
+      <div class="field"><label for="coNote">Instructions for the rider (optional)</label><input id="coNote" maxlength="200" placeholder="e.g. call when you arrive"></div>
+      <div class="co-fee" id="coFeeLine"></div>
+      <div class="co-row"><button class="btn-ghost" id="coBack2" type="button">Back</button><button class="btn-primary" id="coNext2" type="button">Continue to payment</button></div>
+    </section>
 
-    <button class="btn-primary" id="placeOrderBtn">Place order — ₦0</button>
-    <button class="btn-ghost" id="backToReview">Back to review</button>
-    </div>
+    <section id="coStep3" class="co-pane" hidden>
+      <div class="co-summary" id="coSummary"></div>
+      <label class="co-label">How would you like to pay?</label>
+      <div class="pay-option" data-val="delivery" id="optDelivery" role="radio" tabindex="0" aria-checked="false">
+        <input type="radio" name="pay" value="delivery" tabindex="-1">
+        <div><div class="t">Pay on delivery</div><div class="d">Pay the rider in cash or by transfer when your order arrives.</div></div>
+      </div>
+      <div class="pay-option" data-val="before" id="optBefore" role="radio" tabindex="0" aria-checked="false">
+        <input type="radio" name="pay" value="before" tabindex="-1">
+        <div><div class="t">Pay before delivery (bank transfer)</div><div class="d">Transfer to our account. We start packing once we confirm your payment.</div></div>
+      </div>
+      <div id="beforePayPanel" hidden></div>
+      <div class="co-row"><button class="btn-ghost" id="coBack3" type="button">Back</button><button class="btn-primary" id="placeOrderBtn" type="button">Place order</button></div>
+    </section>
   </div>
-</div>
-
-<!-- card payment processing modal -->
-<div class="modal-overlay" id="processingOverlay">
-  <div class="modal" id="processingModal"></div>
 </div>
 
 <!-- confirmation modal -->

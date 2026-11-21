@@ -356,3 +356,34 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .stock-note{font-size:.8rem; font-weight:700; margin:6px 0 2px;}
 .stock-note.low{color:#9a4b00;}
 .stock-note.sold-out{color:#7a2a1a; background:#f7e4de; border-radius:8px; padding:8px 10px; text-align:center;}
+
+/* ---------- three-step checkout ---------- */
+.checkout{max-width:520px}
+.co-head{display:flex;justify-content:space-between;align-items:center}
+.co-steps{list-style:none;display:flex;gap:6px;margin:12px 0 14px;padding:0}
+.co-steps li{flex:1;display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:#6b7a70;padding:8px 6px;border-bottom:3px solid #dfe5e0}
+.co-steps li span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#dfe5e0;color:#40504a;font-size:.75rem;flex:none}
+.co-steps li.on{color:#1f3d2e;border-color:#c8902a}.co-steps li.on span{background:#1f3d2e;color:#fff}
+.co-steps li.done{color:#1f3d2e;border-color:#1f3d2e}.co-steps li.done span{background:#1f6a43;color:#fff}
+.co-pane[hidden],#beforePayPanel[hidden]{display:none}
+.co-row{display:flex;gap:10px;margin-top:12px}.co-row .btn-primary{flex:2}.co-row .btn-ghost{flex:1}
+.co-fee{display:flex;justify-content:space-between;padding:10px 12px;background:#f6f2e7;border-radius:10px;margin:8px 0}
+.co-summary{background:#f6f2e7;border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.co-label{display:block;font-size:.85rem;font-weight:600;margin:14px 0 8px}
+.pay-option:focus-visible{outline:3px solid #9cc9ae;outline-offset:2px}
+.bank-card{border:2px solid #1f3d2e;border-radius:12px;padding:12px;margin:10px 0;background:#fff}
+.bank-title{font-weight:700;color:#1f3d2e;margin-bottom:6px}
+.bank-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #e6ece8;font-size:.92rem}
+.bank-row:first-of-type{border-top:0}
+#placeOrderBtn:disabled{opacity:.6;cursor:wait}
+
+/* ---------- footer ---------- */
+.site-footer{background:#10261b;color:#d7e4db;padding:34px 0 22px;margin-top:40px}
+.foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:26px}
+.foot-brand{font-weight:700;font-size:1.1rem;color:#fff;margin-bottom:6px}.foot-brand strong{color:#e3b04b}
+.site-footer h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.6px;color:#e3b04b;margin:0 0 8px}
+.site-footer a,.site-footer .link-btn,.site-footer span{display:block;color:#d7e4db;text-decoration:none;padding:4px 0;font-size:.92rem;background:none;border:0;text-align:left;cursor:pointer}
+.site-footer a:hover,.site-footer .link-btn:hover{color:#fff;text-decoration:underline}
+.site-footer p{margin:0;font-size:.9rem;line-height:1.5;opacity:.9}
+.foot-base{border-top:1px solid rgba(255,255,255,.14);margin-top:22px;padding-top:14px;font-size:.82rem;opacity:.75}
+@media (max-width:640px){.foot-grid{grid-template-columns:1fr;gap:18px}.co-steps li{font-size:.7rem}}

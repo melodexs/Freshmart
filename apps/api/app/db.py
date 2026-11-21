@@ -34,4 +34,7 @@ adjust_stock = _impl.adjust_stock
 reserve_stock = _impl.reserve_stock
 get_setting = _impl.get_setting
 set_setting = _impl.set_setting
+add_audit = _impl.add_audit
+get_audit = _impl.get_audit
+confirm_payment = _impl.confirm_payment
 ping = _impl.ping

@@ -46,6 +46,9 @@ async def home(request: Request):
         categories=["All", *await catalogue.categories()],
         active="All",
         delivery_fee=await catalogue.delivery_fee(),
+        areas=await catalogue.delivery_areas(),
+        bank=await catalogue.bank_details(),
+        contact_phone=await db.get_setting("contact_phone", ""),
         whatsapp=whatsapp_link(config.WHATSAPP_NUMBER, "Hello! I have a question about my order."),
     )
 
@@ -259,6 +262,9 @@ async def staff_set_status(request: Request, order_id: str, status: str = Form("
         return await _store_feed(
             request, ("error", f"Order {order_id} was just changed. Please review it again.")
         )
+    await db.add_audit("admin", "status_changed", order_id, {"from": order["status"], "to": status})
+    if status == order_status.CANCELLED:
+        await catalogue.restock_order(order)
     note = order_status.refund_note(order) if status == order_status.CANCELLED else None
     msg = f"Order {order_id} is now: {status}." + (f" {note}" if note else "")
     return await _store_feed(request, ("ok", msg))
@@ -290,6 +296,8 @@ async def customer_cancel(request: Request, order_id: str):
         ok = await db.update_order_status(
             order_id, order_status.CANCELLED, allowed_from=order_status.CUSTOMER_CAN_CANCEL_FROM
         )
+        if ok:
+            await catalogue.restock_order(order)
     orders = await db.get_orders_for_user(user["email"])
     if not ok:
         notice = (

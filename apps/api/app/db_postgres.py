@@ -62,6 +62,10 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS audit_log (
+              id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
+              detail JSONB NOT NULL DEFAULT '{}'::jsonb);
             CREATE TABLE IF NOT EXISTS settings (
               key TEXT PRIMARY KEY, value JSONB NOT NULL);
             """
@@ -115,6 +119,11 @@ async def create_user(user: dict) -> bool:
     return res.endswith(" 1")
 
 
+def _pd(detail) -> dict:
+    d = json.loads(detail) if isinstance(detail, str) else detail
+    return d if isinstance(d, dict) else {}
+
+
 def _order(r) -> dict:
     items = r["items"]
     detail = r["payment_detail"]
@@ -129,7 +138,9 @@ def _order(r) -> dict:
         "phone": r["phone"],
         "city": r["city"],
         "payMethod": r["pay_method"],
-        "paymentDetail": json.loads(detail) if isinstance(detail, str) else detail,
+        "paymentDetail": _pd(detail),
+        "customerName": _pd(detail).get("_name", ""),
+        "instructions": _pd(detail).get("_instructions", ""),
         "status": r["status"],
         "user": r["user_email"],
     }
@@ -157,7 +168,13 @@ async def add_order(o: dict) -> None:
             o["phone"],
             o["city"],
             o["payMethod"],
-            json.dumps(o.get("paymentDetail") or {}),
+            json.dumps(
+                {
+                    **(o.get("paymentDetail") or {}),
+                    "_name": o.get("customerName", ""),
+                    "_instructions": o.get("instructions", ""),
+                }
+            ),
             o["status"],
             o["user"],
         )
@@ -325,5 +342,56 @@ async def reserve_stock(product_id: str, qty: int) -> bool:
                WHERE id=$1 AND (stock IS NULL OR stock >= $2)""",
             product_id,
             qty,
+        )
+    return res.endswith(" 1")
+
+
+async def add_audit(actor: str, action: str, subject: str, detail: dict) -> None:
+    """Append-only record of a sensitive action. Never updated or deleted by the app."""
+    async with _pool.acquire() as c:
+        await c.execute(
+            "INSERT INTO audit_log (actor,action,subject,detail) VALUES ($1,$2,$3,$4::jsonb)",
+            actor,
+            action,
+            subject,
+            json.dumps(detail),
+        )
+
+
+async def get_audit(subject: str | None = None, limit: int = 100) -> list[dict]:
+    async with _pool.acquire() as c:
+        if subject:
+            rows = await c.fetch(
+                "SELECT * FROM audit_log WHERE subject=$1 ORDER BY id DESC LIMIT $2", subject, limit
+            )
+        else:
+            rows = await c.fetch("SELECT * FROM audit_log ORDER BY id DESC LIMIT $1", limit)
+    out = []
+    for r in rows:
+        d = r["detail"]
+        out.append(
+            {
+                "at": _iso(r["at"]),
+                "actor": r["actor"],
+                "action": r["action"],
+                "subject": r["subject"],
+                "detail": json.loads(d) if isinstance(d, str) else d,
+            }
+        )
+    return out
+
+
+async def confirm_payment(order_id: str, expected_from: str, new_status: str, record: dict) -> bool:
+    """Atomically move an order out of "awaiting payment" and store the payment record on it.
+    Only succeeds if the order is still in expected_from, so two admins cannot confirm twice."""
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """UPDATE orders SET status=$3,
+                 payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $4::jsonb
+               WHERE id=$1 AND status=$2""",
+            order_id,
+            expected_from,
+            new_status,
+            json.dumps(record),
         )
     return res.endswith(" 1")

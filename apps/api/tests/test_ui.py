@@ -148,7 +148,7 @@ def place_order(c, address="1 Main St"):
             "items": [{"productId": "p1", "optionIndex": 0, "qty": 2, "note": XSS}],
             "address": address,
             "phone": "08022222222",
-            "city": "Otukpo, Benue State",
+            "city": "Otukpo",
             "payMethod": "delivery",
         },
     )
@@ -332,7 +332,8 @@ def test_every_titled_modal_is_an_accessible_dialog(client):
 
     html = client.get("/").text
     dialogs = re.findall(r'role="dialog" aria-modal="true" aria-labelledby="(\w+)"', html)
-    assert len(dialogs) == 7
+    assert len(dialogs) == 6
+    assert "storeTitle" not in dialogs, "the fake SMS inbox must stay removed"
     for ident in dialogs:
         assert f'id="{ident}"' in html  # each dialog points at a real heading
 

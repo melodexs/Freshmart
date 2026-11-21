@@ -167,6 +167,8 @@ async def get_settings():
         "whatsapp": await db.get_setting("whatsapp", ""),
         "contactPhone": await db.get_setting("contact_phone", ""),
         "banner": await db.get_setting("banner", ""),
+        "bank": await catalogue.bank_details(),
+        "areas": await catalogue.delivery_areas(),
     }
 
 
@@ -184,6 +186,44 @@ async def put_settings(request: Request):
     ):
         if key in b:
             await db.set_setting(setting, clean_text(b[key], limit))
+    if "areas" in b:
+        raw_areas = b["areas"]
+        if not isinstance(raw_areas, list) or not 1 <= len(raw_areas) <= 40:
+            return err(400, "Add between 1 and 40 delivery areas.")
+        areas, seen = [], set()
+        for a in raw_areas:
+            name = clean_text(a.get("name") if isinstance(a, dict) else None, 60)
+            fee = clean_int(a.get("fee") if isinstance(a, dict) else None, 0, 100_000)
+            if not name or fee is None:
+                return err(
+                    400, "Each delivery area needs a name and a fee from 0 to 100,000 naira."
+                )
+            if name.lower() in seen:
+                return err(400, f"The area '{name}' is listed twice.")
+            seen.add(name.lower())
+            areas.append({"name": name, "fee": fee})
+        await db.set_setting("delivery_areas", areas)
+        await db.add_audit("admin", "delivery_areas_changed", "settings", {"areas": areas})
+    if "bank" in b:
+        raw = b["bank"] if isinstance(b["bank"], dict) else {}
+        bank = clean_text(raw.get("bank"), 60)
+        name = clean_text(raw.get("accountName"), 80)
+        number = re.sub(r"\s", "", clean_text(raw.get("accountNumber"), 20))
+        if (bank or name or number) and not (bank and name and number):
+            return err(
+                400, "Enter the bank, account name and account number together, or clear all three."
+            )
+        if number and not re.fullmatch(r"\d{10}", number):
+            return err(400, "A Nigerian account number has exactly 10 digits.")
+        await db.set_setting(
+            "bank_details", {"bank": bank, "accountName": name, "accountNumber": number}
+        )
+        await db.add_audit(
+            "admin",
+            "bank_details_changed",
+            "settings",
+            {"bank": bank, "accountNumberEnding": number[-4:]},
+        )
     for key, setting in (("whatsapp", "whatsapp"), ("contactPhone", "contact_phone")):
         if key in b:
             from ..phone import normalise
@@ -198,7 +238,12 @@ async def put_settings(request: Request):
 @router.get("/overview")
 async def overview():
     orders = await db.get_all_orders()
-    live = [o for o in orders if o["status"] != order_status.CANCELLED]
+    # Unpaid pay-ahead orders are not revenue yet, and cancelled ones never are.
+    live = [
+        o
+        for o in orders
+        if o["status"] not in (order_status.CANCELLED, order_status.AWAITING_PAYMENT)
+    ]
     now = datetime.now(UTC)
     today = now.date().isoformat()
 
@@ -229,7 +274,13 @@ async def overview():
         "pendingOrders": sum(
             1
             for o in orders
-            if o["status"] in (order_status.PAID, order_status.AWAITING, order_status.PREPARING)
+            if o["status"]
+            in (
+                order_status.AWAITING_PAYMENT,
+                order_status.PAID,
+                order_status.AWAITING,
+                order_status.PREPARING,
+            )
         ),
         "completedOrders": counts.get(order_status.DELIVERED, 0),
         "customers": len({o["user"] for o in orders}),
@@ -268,12 +319,69 @@ async def set_order_status(order_id: str, request: Request):
     ok = await db.update_order_status(order_id, new, allowed_from=[o["status"]])
     if not ok:
         return err(409, "That order was just changed by someone else. Please refresh.")
+    await db.add_audit("admin", "status_changed", order_id, {"from": o["status"], "to": new})
     if new == order_status.CANCELLED:
-        # Cancelling gives the reserved stock back.
-        for i in o["items"]:
-            if i.get("productId"):
-                await db.adjust_stock(i["productId"], int(i["qty"]))
+        await catalogue.restock_order(o)  # cancelling gives the reserved stock back
     return {"order": await db.get_order(order_id)}
+
+
+PAY_METHODS = {"bank transfer", "ussd", "cash", "pos", "other"}
+
+
+@router.post("/orders/{order_id}/confirm-payment")
+async def confirm_payment(order_id: str, request: Request):
+    """Mark a pay-ahead order as paid, once, with a permanent record of who and how much.
+
+    Only an order that is still "Awaiting payment" can be confirmed. The amount received must be
+    entered and must match the order total, so a typo cannot quietly mark an order paid.
+    """
+    o = await db.get_order(order_id)
+    if not o:
+        return err(404, "That order does not exist.")
+    if o["status"] != order_status.AWAITING_PAYMENT:
+        return err(409, "Only an order that is awaiting payment can be confirmed as paid.")
+    b = await body_of(request)
+    amount = clean_int(b.get("amount"), 1, MAX_PRICE * 100)
+    if amount is None:
+        return err(400, "Enter the amount you received, in naira.")
+    if amount != o["total"]:
+        return err(
+            409,
+            f"The amount received (₦{amount:,}) does not match the order total (₦{o['total']:,}). "
+            "Check the payment before confirming.",
+        )
+    method = clean_text(b.get("method"), 20).lower()
+    if method not in PAY_METHODS:
+        return err(400, "Choose how the payment was received.")
+    reference = clean_text(b.get("reference"), 80)
+    if not reference:
+        return err(400, "Enter the bank or transfer reference so the payment can be traced.")
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    record = {
+        "paid": True,
+        "paidAmount": amount,
+        "paidMethod": method,
+        "paidReference": reference,
+        "paidAt": now,
+        "confirmedBy": "admin",
+    }
+    ok = await db.confirm_payment(
+        order_id, order_status.AWAITING_PAYMENT, order_status.PAID, record
+    )
+    if not ok:
+        return err(409, "That order was just changed by someone else. Please refresh.")
+    await db.add_audit(
+        "admin",
+        "payment_confirmed",
+        order_id,
+        {"amount": amount, "method": method, "reference": reference, "orderTotal": o["total"]},
+    )
+    return {"order": await db.get_order(order_id)}
+
+
+@router.get("/audit")
+async def audit(subject: str = ""):
+    return {"entries": await db.get_audit(subject.strip()[:40] or None, 100)}
 
 
 @router.get("/customers")

@@ -14,7 +14,7 @@ from pathlib import Path
 from . import config
 
 _lock = threading.Lock()
-EMPTY = {"users": {}, "orders": [], "storeSms": [], "products": {}, "settings": {}}
+EMPTY = {"users": {}, "orders": [], "storeSms": [], "products": {}, "settings": {}, "audit": []}
 
 
 def _path() -> Path:
@@ -216,3 +216,43 @@ async def reserve_stock(product_id: str, qty: int) -> bool:
         p["stock"] -= qty
         _write(data)
         return True
+
+
+async def add_audit(actor: str, action: str, subject: str, detail: dict) -> None:
+    from datetime import UTC, datetime
+
+    with _lock:
+        data = _read()
+        data["audit"].insert(
+            0,
+            {
+                "at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "actor": actor,
+                "action": action,
+                "subject": subject,
+                "detail": detail,
+            },
+        )
+        _write(data)
+
+
+async def get_audit(subject: str | None = None, limit: int = 100) -> list[dict]:
+    with _lock:
+        rows = _read()["audit"]
+    if subject:
+        rows = [r for r in rows if r["subject"] == subject]
+    return rows[:limit]
+
+
+async def confirm_payment(order_id: str, expected_from: str, new_status: str, record: dict) -> bool:
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] == order_id:
+                if o["status"] != expected_from:
+                    return False
+                o["status"] = new_status
+                o["paymentDetail"] = {**(o.get("paymentDetail") or {}), **record}
+                _write(data)
+                return True
+        return False

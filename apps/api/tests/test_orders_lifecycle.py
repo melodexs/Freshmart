@@ -51,7 +51,7 @@ def status_of(c, order_id):
 
 def test_initial_status_comes_from_the_lifecycle(client):
     signup(client)
-    assert place(client, "before")["status"] == order_status.PAID
+    assert place(client, "before")["status"] == order_status.AWAITING_PAYMENT
     assert place(client, "delivery")["status"] == order_status.AWAITING
 
 
@@ -100,14 +100,24 @@ def test_status_update_requires_staff(client, monkeypatch):
     assert status_of(client, o["id"]) == order_status.AWAITING
 
 
-def test_staff_cancelling_a_prepaid_order_shows_a_refund_reminder(client, monkeypatch):
+def test_cancelling_an_unpaid_order_shows_no_refund_reminder(client, monkeypatch):
     signup(client)
     o = place(client, "before")
     staff(client, monkeypatch)
     r = client.post(
         f"/api/store/ui/orders/{o['id']}/status", data={"status": order_status.CANCELLED}
     )
-    assert "refund" in r.text.lower()
+    assert "refund" not in r.text.lower(), "nothing was paid, so there is nothing to refund"
+
+
+def test_cancelling_a_paid_order_shows_a_refund_reminder():
+    paid = {"payMethod": "before", "status": order_status.PAID}
+    assert "refund" in (order_status.refund_note(paid) or "").lower()
+    unpaid = {"payMethod": "before", "status": order_status.AWAITING_PAYMENT}
+    assert order_status.refund_note(unpaid) is None
+    assert (
+        order_status.refund_note({"payMethod": "delivery", "status": order_status.AWAITING}) is None
+    )
 
 
 def test_unknown_order_is_reported_not_crashed(client, monkeypatch):

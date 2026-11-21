@@ -11,7 +11,7 @@ ORDER = {
     "items": [{"productId": "p1", "optionIndex": 1, "qty": 2}],
     "address": "12 Market Rd",
     "phone": "08022222222",
-    "city": "Ibadan",
+    "city": "Otukpo",
     "payMethod": "delivery",
 }
 
@@ -100,10 +100,10 @@ def test_order_prices_come_from_server(client):
     assert client.get("/api/orders/mine").json()["orders"][0]["id"] == o["id"]
 
 
-def test_pay_before_status(client):
+def test_pay_ahead_orders_are_not_paid_until_payment_is_confirmed(client):
     signup(client)
     o = client.post("/api/orders", json={**ORDER, "payMethod": "before"}).json()["order"]
-    assert o["status"] == "Payment confirmed"
+    assert o["status"] == "Awaiting payment"
 
 
 @pytest.mark.parametrize(
@@ -138,11 +138,11 @@ def test_orders_are_per_user(client):
     assert client.get("/api/orders/mine").json()["orders"] == []
 
 
-def test_store_feed_open_in_dev(client):
+def test_placing_an_order_does_not_pretend_to_send_an_sms(client):
+    """No real SMS provider is connected, so no fake 'SMS sent' record may be written."""
     signup(client)
     client.post("/api/orders", json=ORDER)
-    n = client.get("/api/store/notifications").json()["notifications"]
-    assert len(n) == 1 and "New order" in n[0]["text"]
+    assert client.get("/api/store/notifications").json()["notifications"] == []
 
 
 def test_store_feed_needs_key_when_configured(client, monkeypatch):
