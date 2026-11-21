@@ -560,9 +560,15 @@ async def discount_usage(code: str, email: str) -> tuple[int, bool]:
 
 
 async def claim_discount(rule: dict, email: str, order_id: str, amount: int) -> bool:
-    """Record a use only if the limits still hold, in one statement, so two orders cannot both
-    take the last use. Returns False when the code ran out or this customer already used it."""
-    async with _pool.acquire() as c:
+    """Record a use only if the limits still hold. Returns False when the code ran out or this
+    customer already used it.
+
+    Claims for one code are serialised with a transaction-scoped advisory lock. Without it, two
+    simultaneous orders would both check "has this customer used it?" before either was saved,
+    both see "no", and a once-only code would be used twice.
+    """
+    async with _pool.acquire() as c, c.transaction():
+        await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))", "discount:" + rule["code"])
         res = await c.execute(
             """INSERT INTO discount_uses (code, email, order_id, amount)
                SELECT $1, $2, $3, $4
