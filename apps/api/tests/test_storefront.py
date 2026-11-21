@@ -32,7 +32,12 @@ def cards(html):
 
 def test_home_has_the_brief_headline_and_both_buttons(client):
     h = client.get("/").text
-    assert "Everything fresh. Everything you need." in h
+    # The visible words must be the brief's headline; styling tags (the gold italic word) don't count.
+    heading = re.search(r"<h1>(.*?)</h1>", h, re.S).group(1)
+    assert (
+        " ".join(re.sub(r"<[^>]+>", " ", heading).split())
+        == "Everything fresh. Everything you need."
+    )
     assert "Shop now" in h and "Explore categories" in h
     assert "Quality products delivered conveniently to your doorstep" in h
 
