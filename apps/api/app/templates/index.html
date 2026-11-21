@@ -20,6 +20,9 @@
     <input id="searchInput" name="q" type="search" placeholder="Search rice, noodles, drinks..." autocomplete="off" aria-label="Search products"
            hx-get="/ui/products" hx-trigger="input changed delay:200ms, search" hx-target="#catalog" hx-include="#filters">
     <input type="hidden" id="activeCat" name="cat" value="All">
+    <details class="more-filters">
+      <summary>Sort &amp; filter</summary>
+      <div class="more-filters-body">
     <select id="sortSelect" name="sort" class="sort-select" aria-label="Sort products" hx-get="/ui/products" hx-trigger="change" hx-target="#catalog" hx-include="#filters">
       <option value="default">Sort: Featured</option>
       <option value="popular">Most popular</option>
@@ -32,6 +35,8 @@
       <input id="maxPrice" name="max" type="number" inputmode="numeric" min="0" placeholder="Max ₦" aria-label="Maximum price" hx-get="/ui/products" hx-trigger="change, keyup changed delay:400ms" hx-target="#catalog" hx-include="#filters">
     </div>
     <button type="button" class="chip" id="favFilter" aria-pressed="false" hx-get="/ui/products" hx-vals='{"favs":"1"}' hx-target="#catalog" hx-include="#filters">♡ Favourites</button>
+      </div>
+    </details>
   </div></div></div>
   <nav class="cats"><div class="wrap" id="catNav">
     {% for c in categories %}
@@ -40,25 +45,42 @@
   </div></nav>
 </header>
 
-<div class="hero">
+<div class="hero" id="top">
   <div class="hero-bg" role="img" aria-label="Shelves packed with groceries inside a neighbourhood provision store"></div>
+  <div class="hero-glow" aria-hidden="true"></div>
   <div class="wrap hero-flex">
     <div class="hero-text">
-      <div class="pill">Delivering across Otukpo, Benue State</div>
-      <h1>Everything fresh. Everything you need.</h1>
-      <p>Shop your everyday groceries, fresh foodstuff and household essentials from Okwui&#39;s Grocery Store. Quality products delivered conveniently to your doorstep.</p>
-      <div class="hero-cta"><a class="btn-primary hero-btn" href="#catalog">Shop now</a><a class="btn-ghost hero-btn light" href="#categories">Explore categories</a></div>
+      <div class="pill"><span class="pill-dot" aria-hidden="true"></span>Delivering across Otukpo, Benue State</div>
+      <h1>Everything <em>fresh.</em> <span class="h1-line2">Everything you need.</span></h1>
+      <p class="hero-lead">Shop your everyday groceries, fresh foodstuff and household essentials from Okwui&#39;s Grocery Store. Quality products delivered conveniently to your doorstep.</p>
+      <div class="hero-cta"><a class="btn-primary hero-btn" href="#catalog">Shop now <span aria-hidden="true">→</span></a><a class="btn-ghost hero-btn light" href="#categories">Explore categories</a></div>
+      <ul class="hero-facts" aria-label="Store facts">
+        <li><strong data-count="{{ product_total }}">{{ product_total }}</strong><span>Products</span></li>
+        <li><strong data-count="{{ category_cards|length }}">{{ category_cards|length }}</strong><span>Categories</span></li>
+        <li><strong>{{ areas|map(attribute="fee")|min|naira }}</strong><span>Delivery from</span></li>
+      </ul>
+    </div>
+    <div class="hero-stage" aria-hidden="true">
+      {% for p in hero_picks %}
+      <div class="float-card fc{{ loop.index }}"><img src="{{ p.photo }}" alt="" width="220" height="220" decoding="async"{% if loop.index > 1 %} loading="lazy"{% endif %}></div>
+      {% endfor %}
+      <div class="hero-badge"><span>Pay on</span><strong>Delivery</strong></div>
     </div>
   </div>
+  <a class="scroll-cue" href="#categories" aria-label="Scroll to categories"><span></span></a>
 </div>
 
-<section class="wrap info-strip" aria-label="How ordering works">
+<div class="marquee" aria-hidden="true"><div class="marquee-track">
+  {% for i in range(2) %}<span>Fresh groceries</span><i></i><span>Delivered in Otukpo</span><i></i><span>Pay on delivery</span><i></i><span>Track every order</span><i></i><span>Friendly support</span><i></i>{% endfor %}
+</div></div>
+
+<section class="wrap info-strip reveal" aria-label="How ordering works">
   <div class="info-item"><strong>🚚 Delivery in Otukpo</strong><span>Delivery from {{ areas|map(attribute="fee")|min|naira }}, depending on your area. You see the exact fee at checkout.</span></div>
   <div class="info-item"><strong>💳 Pay your way</strong><span>Pay on delivery{% if bank.ready %}, or pay ahead by bank transfer{% endif %}.</span></div>
   <div class="info-item"><strong>📦 Track every order</strong><span>Use the Track button with your reference and phone number.</span></div>
 </section>
 
-<section class="wrap" id="categories" aria-labelledby="catTitle">
+<section class="wrap reveal" id="categories" aria-labelledby="catTitle">
   <div class="section-title"><h2 id="catTitle">Shop by category</h2></div>
   <div class="cat-cards">
     {% for c in category_cards %}
@@ -69,7 +91,7 @@
   </div>
 </section>
 
-<section class="wrap shelves" id="offers" aria-label="Featured shelves">
+<section class="wrap shelves reveal" id="offers" aria-label="Featured shelves">
   {% for sh in shelves %}{% if sh["items"] %}
   <div class="shelf-block">
     <div class="section-title"><h2>{{ sh.title }}</h2><button type="button" class="btn-link" hx-get="/ui/products" hx-vals='{"section": "{{ sh.key }}"}' hx-target="#catalog" data-scroll="#catalog">See all</button></div>
@@ -95,7 +117,7 @@
 
 <button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
 
-<section class="wrap trust" aria-labelledby="trustTitle">
+<section class="wrap trust reveal" aria-labelledby="trustTitle">
   <div class="section-title"><h2 id="trustTitle">Why shop with OGS</h2></div>
   <div class="trust-grid">
     <div><strong>🥬 Quality groceries</strong><span>Staples, produce, drinks and household basics, picked for everyday cooking.</span></div>
@@ -106,7 +128,7 @@
   </div>
 </section>
 
-<section class="wrap faq" id="about" aria-labelledby="faqTitle">
+<section class="wrap faq reveal" id="about" aria-labelledby="faqTitle">
   <div class="section-title"><h2 id="faqTitle">Questions, answered</h2></div>
   <details><summary>Where do you deliver?</summary><p>We deliver in {{ areas|map(attribute="name")|join(", ") }}. Each area has its own delivery fee, which you see before you place an order.</p></details>
   <details><summary>How can I pay?</summary><p>Pay the rider when your order arrives{% if bank.ready %}, or pay ahead by bank transfer. A pay-ahead order is packed once we confirm your payment{% endif %}. We never ask for card details on this site.</p></details>
