@@ -38,18 +38,64 @@ def _trigger(resp: Response, event: str, detail: dict | None = None) -> Response
     return resp
 
 
+CATEGORY_EMOJI = {
+    "Foodstuff": "🍚",
+    "Snacks": "🍪",
+    "Drinks & Dairy": "🥤",
+    "Fresh Produce": "🥬",
+    "Household": "🧴",
+    "Bakery": "🍞",
+    "Beauty & Personal Care": "🧼",
+}
+
+
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    products = await catalogue.all_products()
+    counts: dict[str, int] = {}
+    for p in products:
+        counts[p["cat"]] = counts.get(p["cat"], 0) + 1
+    cards = [
+        {"name": n, "count": c, "emoji": CATEGORY_EMOJI.get(n, "🛒")} for n, c in counts.items()
+    ]
+    shelves = [
+        {
+            "key": "best",
+            "title": "Best sellers",
+            "items": await catalogue.shelf(section="best", limit=6),
+        },
+        {
+            "key": "offers",
+            "title": "Special offers",
+            "items": await catalogue.shelf(section="offers", limit=6),
+        },
+        {
+            "key": "new",
+            "title": "New arrivals",
+            "items": await catalogue.shelf(section="new", limit=6),
+        },
+        {
+            "key": "featured",
+            "title": "Featured products",
+            "items": await catalogue.shelf(section="featured", limit=6),
+        },
+    ]
     return _render(
         request,
         "index.html",
         categories=["All", *await catalogue.categories()],
         active="All",
+        category_cards=cards,
+        shelves=shelves,
+        discount=catalogue.discount_percent,
         delivery_fee=await catalogue.delivery_fee(),
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
         contact_phone=await db.get_setting("contact_phone", ""),
-        whatsapp=whatsapp_link(config.WHATSAPP_NUMBER, "Hello! I have a question about my order."),
+        whatsapp=whatsapp_link(
+            await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
+            "Hello! I have a question about my order.",
+        ),
     )
 
 
@@ -61,30 +107,101 @@ async def admin_page(request: Request):
     return resp
 
 
+def _price(v: str) -> int | None:
+    v = (v or "").strip()
+    return int(v) if v.isdigit() and len(v) <= 9 else None
+
+
 @router.get("/ui/products", response_class=HTMLResponse)
-async def product_grid(request: Request, cat: str = "All", q: str = "", sort: str = "default"):
-    q_norm = q.strip().lower()[:60]
+async def product_grid(
+    request: Request,
+    cat: str = "All",
+    q: str = "",
+    sort: str = "default",
+    section: str = "",
+    min: str = "",
+    max: str = "",
+    favs: str = "",
+):
     categories = ["All", *await catalogue.categories()]
-    items = [
-        p
-        for p in await catalogue.all_products()
-        if (cat == "All" or p["cat"] == cat) and q_norm in p["name"].lower()
-    ]
-    # Price sorting uses each product's smallest size, which is the "from" price shoppers see first.
-    if sort == "price-asc":
-        items.sort(key=lambda p: min(o["price"] for o in p["options"]))
-    elif sort == "price-desc":
-        items.sort(key=lambda p: min(o["price"] for o in p["options"]), reverse=True)
-    elif sort == "name":
-        items.sort(key=lambda p: p["name"].lower())
-    resp = _render(
+    user = auth.current_user(request)
+    fav_ids = await db.get_favourites(user["email"]) if user else []
+    items = await catalogue.shelf(
+        cat=cat if cat in categories else "All",
+        q=q,
+        sort=sort,
+        section=section if section in ("best", "new", "offers", "featured") else "",
+        min_price=_price(min),
+        max_price=_price(max),
+        only_ids=fav_ids if favs == "1" else None,
+    )
+    heading = {
+        "best": "Best sellers",
+        "new": "New arrivals",
+        "offers": "Special offers",
+        "featured": "Featured products",
+    }.get(section) or (
+        "Your favourites" if favs == "1" else ("All products" if cat == "All" else cat)
+    )
+    return _render(
         request,
         "partials/products.html",
         products=items,
         categories=categories,
         active=cat if cat in categories else "All",
+        heading=heading,
+        fav_ids=fav_ids,
+        discount=catalogue.discount_percent,
+        favs_only=favs == "1",
     )
-    return resp
+
+
+@router.get("/product/{product_id}", response_class=HTMLResponse)
+async def product_page(request: Request, product_id: str):
+    p = await db.get_product(product_id)
+    if not p or not p.get("active", True):
+        return _render(request, "product_missing.html", status=404)
+    user = auth.current_user(request)
+    fav_ids = await db.get_favourites(user["email"]) if user else []
+    return _render(
+        request,
+        "product.html",
+        p=p,
+        related=await catalogue.related(p),
+        discount=catalogue.discount_percent,
+        in_stock=catalogue.in_stock(p),
+        fav_ids=fav_ids,
+        on=p["id"] in fav_ids,
+        pid=p["id"],
+        delivery_fee=await catalogue.delivery_fee(),
+        areas=await catalogue.delivery_areas(),
+        bank=await catalogue.bank_details(),
+        contact_phone=await db.get_setting("contact_phone", ""),
+        whatsapp=whatsapp_link(
+            config.WHATSAPP_NUMBER, f"Hello! I have a question about {p['name']}."
+        ),
+    )
+
+
+@router.post("/ui/favourites/{product_id}", response_class=HTMLResponse)
+async def toggle_favourite(request: Request, product_id: str):
+    """Add or remove a favourite for the signed-in customer. Returns the heart button."""
+    user = auth.current_user(request)
+    if not user:
+        return HTMLResponse(
+            '<span class="fav-note" role="status">Sign in to save favourites</span>',
+            status_code=401,
+        )
+    if not await db.get_product(product_id):
+        return HTMLResponse("", status_code=404)
+    favs = await db.get_favourites(user["email"])
+    if product_id in favs:
+        await db.remove_favourite(user["email"], product_id)
+        now = False
+    else:
+        await db.add_favourite(user["email"], product_id)
+        now = True
+    return _render(request, "partials/fav_button.html", pid=product_id, on=now)
 
 
 @router.get("/ui/header", response_class=HTMLResponse)

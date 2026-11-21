@@ -62,6 +62,9 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS favourites (
+              email TEXT NOT NULL, product_id TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY (email, product_id));
             CREATE TABLE IF NOT EXISTS audit_log (
               id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
@@ -395,3 +398,40 @@ async def confirm_payment(order_id: str, expected_from: str, new_status: str, re
             json.dumps(record),
         )
     return res.endswith(" 1")
+
+
+async def get_favourites(email: str) -> list[str]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT product_id FROM favourites WHERE email=$1 ORDER BY at DESC", email
+        )
+    return [r["product_id"] for r in rows]
+
+
+async def add_favourite(email: str, product_id: str) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            "INSERT INTO favourites (email,product_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+            email,
+            product_id,
+        )
+
+
+async def remove_favourite(email: str, product_id: str) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            "DELETE FROM favourites WHERE email=$1 AND product_id=$2", email, product_id
+        )
+
+
+async def popularity() -> dict[str, int]:
+    """How many units of each product have been ordered (cancelled orders do not count)."""
+    async with _pool.acquire() as c:
+        rows = await c.fetch("SELECT items FROM orders WHERE status <> 'Cancelled'")
+    out: dict[str, int] = {}
+    for r in rows:
+        items = json.loads(r["items"]) if isinstance(r["items"], str) else r["items"]
+        for i in items:
+            if i.get("productId"):
+                out[i["productId"]] = out.get(i["productId"], 0) + int(i.get("qty", 0))
+    return out

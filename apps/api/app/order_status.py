@@ -11,6 +11,7 @@ AWAITING_PAYMENT = "Awaiting payment"
 PAID = "Payment confirmed"
 AWAITING = "Awaiting delivery — pay on arrival"
 PREPARING = "Preparing your order"
+READY = "Ready for dispatch"
 OUT = "Out for delivery"
 DELIVERED = "Delivered"
 CANCELLED = "Cancelled"
@@ -27,16 +28,22 @@ STAFF_NEXT: dict[str, list[str]] = {
     AWAITING_PAYMENT: [CANCELLED],
     PAID: [PREPARING, CANCELLED],
     AWAITING: [PREPARING, CANCELLED],
-    PREPARING: [OUT, CANCELLED],
+    PREPARING: [READY, CANCELLED],
+    READY: [OUT, CANCELLED],
     OUT: [DELIVERED],
     DELIVERED: [],
     CANCELLED: [],
 }
 
 # Customers may cancel only before the order leaves the store.
-CUSTOMER_CAN_CANCEL_FROM = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING]
+CUSTOMER_CAN_CANCEL_FROM = [
+    AWAITING_PAYMENT,
+    PAID,
+    AWAITING,
+    PREPARING,
+]  # not once it is packed and ready
 
-ALL = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING, OUT, DELIVERED, CANCELLED]
+ALL = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING, READY, OUT, DELIVERED, CANCELLED]
 
 # Rough progress for the tracking bar (0 to 100). Cancelled has none.
 PROGRESS = {
@@ -44,7 +51,8 @@ PROGRESS = {
     PAID: 20,
     AWAITING: 20,
     PREPARING: 45,
-    OUT: 75,
+    READY: 62,
+    OUT: 80,
     DELIVERED: 100,
     CANCELLED: 0,
 }
@@ -71,3 +79,51 @@ def refund_note(order: dict) -> str | None:
     if order.get("payMethod") == "before" and order.get("status") != AWAITING_PAYMENT:
         return "This order was paid ahead. Arrange a refund with the customer."
     return None
+
+
+def timeline(order: dict) -> list[dict]:
+    """The steps a customer sees for an order, each marked done, current or upcoming.
+
+    A pay-on-delivery order has no payment step before delivery, so it is not shown. A cancelled
+    order shows a single cancelled step instead of a journey it never took. Times are only shown
+    when the system really recorded them (the payment confirmation); nothing is invented.
+    """
+    status = order.get("status", "")
+    if status == CANCELLED:
+        return [{"label": "Order cancelled", "state": "cancelled", "when": None}]
+    prepaid = order.get("payMethod") == "before"
+    detail = order.get("paymentDetail") or {}
+    steps = [
+        ("Order received", {AWAITING_PAYMENT, PAID, AWAITING, PREPARING, READY, OUT, DELIVERED})
+    ]
+    if prepaid:
+        steps.append(("Payment confirmed", {PAID, PREPARING, READY, OUT, DELIVERED}))
+    steps += [
+        ("Order processing", {PREPARING, READY, OUT, DELIVERED}),
+        ("Ready for dispatch", {READY, OUT, DELIVERED}),
+        ("Out for delivery", {OUT, DELIVERED}),
+        ("Delivered", {DELIVERED}),
+    ]
+    # Which step is the current one: the last step whose condition holds, unless delivered.
+    reached = [i for i, (_, done_in) in enumerate(steps) if status in done_in]
+    current = reached[-1] if reached else 0
+    out = []
+    for i, (label, _) in enumerate(steps):
+        if i < current or (status == DELIVERED and i == current):
+            state = "done"
+        elif i == current:
+            state = "current"
+        else:
+            state = "upcoming"
+        when = None
+        if label == "Order received":
+            when = order.get("date")
+        elif label == "Payment confirmed" and detail.get("paidAt"):
+            when = detail["paidAt"]
+        out.append({"label": label, "state": state, "when": when})
+    if prepaid and status == AWAITING_PAYMENT:
+        out[0]["state"] = "done"
+        out.insert(1, {"label": "Waiting for your payment", "state": "current", "when": None})
+        if len(out) > 2 and out[2]["label"] == "Payment confirmed":
+            out[2]["state"] = "upcoming"
+    return out

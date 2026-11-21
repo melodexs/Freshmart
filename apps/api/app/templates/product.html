@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }} — Okwui&#39;s Grocery Store (OGS){% endblock %}
+{% block body %}
+<header>
+  <div class="topbar">
+    <a class="logo" href="/" aria-label="Okwui&#39;s Grocery Store (OGS) home"><span class="logo-full">Okwui&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></a>
+    <div class="topbar-spacer"></div>
+    <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
+    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">📦 Orders</button>
+    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">🔎 Track</button>
+    <button class="icon-btn" id="cartBtn" type="button">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
+  </div>
+</header>
+
+<main class="wrap pdp" id="catalog">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Shop</a> <span aria-hidden="true">›</span> <a href="/?cat={{ p.cat|urlencode }}">{{ p.cat }}</a> <span aria-hidden="true">›</span> <span>{{ p.name }}</span></nav>
+  <div class="grid pdp-grid" id="productGrid">
+    <div class="card pdp-card" data-product-id="{{ p.id }}" data-cat="{{ p.cat }}">
+      <div class="pdp-media"><div class="thumb"{% if p.id|frame_colour %} style="--frame:{{ p.id|frame_colour }}"{% endif %}>{{ p|product_art }}</div></div>
+      <div class="pdp-info">
+        <div class="pdp-top"><span class="pill-cat">{{ p.cat }}</span>
+          <span id="favSlot">{% include "partials/fav_button.html" with context %}</span></div>
+        <h1>{{ p.name }}</h1>
+        {% if p.description %}<p class="pdp-desc">{{ p.description }}</p>{% endif %}
+        {% if p.options|length > 1 %}
+          <label class="pdp-label" for="sizeSel">Size</label>
+          <select id="sizeSel" class="opt-select" aria-label="Choose size for {{ p.name }}">
+            {% for o in p.options %}<option value="{{ loop.index0 }}" data-price="{{ o.price }}">{{ o.label }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <div class="unit">{{ p.options[0].label }}</div>
+        {% endif %}
+        <div class="row pdp-price-row">
+          <div class="price">{{ p.options[0].price|naira }}</div>
+          {% set pct = discount(p, 0) %}
+          {% if pct %}<s class="was" aria-label="Previous price">{{ p.comparePrices[0]|naira }}</s><span class="off-badge">{{ pct }}% off</span>{% endif %}
+        </div>
+        {% if not in_stock %}
+          <div class="stock-note sold-out">Out of stock</div>
+        {% else %}
+          {% if p.stock is not none and p.stock <= 5 %}<div class="stock-note low">Only {{ p.stock }} left</div>
+          {% elif p.stock is not none %}<div class="stock-note ok">In stock</div>{% endif %}
+          <div class="qtyArea"></div>
+        {% endif %}
+        <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "options": p.options}|tojson }}</script>
+        <ul class="pdp-points"><li>Delivered across Otukpo</li><li>Pay on delivery available</li><li>Prices in Nigerian naira</li></ul>
+        {% if whatsapp %}<a class="btn-ghost pdp-ask" href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer">Ask about this product on WhatsApp</a>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if related %}
+  <section class="pdp-related" aria-labelledby="relTitle"><h2 id="relTitle">You may also like</h2>
+    <div class="grid" id="relatedGrid">
+      {% for r in related %}
+      <a class="card rel-card" href="/product/{{ r.id }}"><div class="thumb"{% if r.id|frame_colour %} style="--frame:{{ r.id|frame_colour }}"{% endif %}>{{ r|product_art }}</div>
+        <h3>{{ r.name }}</h3><div class="price">{{ r.options[0].price|naira }}</div></a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% include "partials/site_footer.html" %}
+<div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
+{% include "partials/modals.html" %}
+<script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee, "areas": areas, "bank": bank}|tojson }}</script>
+{% endblock %}

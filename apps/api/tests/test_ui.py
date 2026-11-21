@@ -305,7 +305,7 @@ def test_sort_applies_within_a_category(client):
     html = client.get("/ui/products", params={"cat": "Snacks", "sort": "name"}).text
     import re
 
-    names = re.findall(r"<h3>([^<]+)</h3>", html)
+    names = re.findall(r"<h3><a [^>]*>([^<]+)</a></h3>", html)
     assert len(names) == 4 and names == sorted(names, key=str.lower)
 
 
@@ -315,8 +315,9 @@ def test_page_has_a_back_to_top_button(client):
 
 def test_home_explains_delivery_fee_payment_and_tracking(client):
     html = client.get("/").text
-    assert "How ordering works" in html and "₦800 delivery fee" in html
+    assert "How ordering works" in html and "Delivery from ₦800" in html
     assert "Pay on delivery" in html and "Track every order" in html
+    assert "flat" not in html.lower() and "by card" not in html.lower()
 
 
 def test_confirmation_offers_to_copy_the_order_reference(client):

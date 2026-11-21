@@ -115,7 +115,7 @@ async function orders(root) {
   await load();
 }
 function orderRow(o, reload) {
-  const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
+  const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Ready for dispatch", "Cancelled"], "Ready for dispatch": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
   const move = next.length ? h("select", { "aria-label": "Move order " + o.id, onchange: async (e) => {
     const to = e.target.value; if (!to) return;
     if (to === "Cancelled" && !confirm(`Cancel order ${o.id}? Its stock goes back on the shelf.`)) { e.target.value = ""; return; }

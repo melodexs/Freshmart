@@ -106,3 +106,89 @@ async def fee_for_area(name) -> int | None:
         if a["name"].lower() == name.strip().lower():
             return a["fee"]
     return None
+
+
+def from_price(p: dict) -> int:
+    """The smallest size's price: the 'from' price shoppers see first."""
+    return min(o["price"] for o in p["options"])
+
+
+def discount_percent(p: dict, index: int = 0) -> int | None:
+    """Whole-number percent off for a size, when the admin set an old price. Otherwise None."""
+    was = (p.get("comparePrices") or [None] * len(p["options"]))[index : index + 1]
+    was = was[0] if was else None
+    now = p["options"][index]["price"]
+    if isinstance(was, int) and was > now:
+        return round((was - now) * 100 / was)
+    return None
+
+
+def on_offer(p: dict) -> bool:
+    return any(discount_percent(p, i) for i in range(len(p["options"])))
+
+
+def in_stock(p: dict) -> bool:
+    return p.get("stock") is None or p["stock"] > 0
+
+
+async def shelf(
+    *,
+    cat: str = "All",
+    q: str = "",
+    sort: str = "default",
+    section: str = "",
+    min_price: int | None = None,
+    max_price: int | None = None,
+    only_ids: list[str] | None = None,
+    limit: int | None = None,
+) -> list[dict]:
+    """The one place that decides which products show, and in what order.
+
+    section: "best" (most ordered), "new" (newest first), "offers" (discounted), "featured".
+    Price filters compare against the 'from' price. Sold-out products sort last.
+    """
+    q_norm = q.strip().lower()[:60]
+    items = []
+    for p in await db.list_products():
+        if cat != "All" and p["cat"] != cat:
+            continue
+        if q_norm and q_norm not in p["name"].lower() and q_norm not in p["cat"].lower():
+            continue
+        price = from_price(p)
+        if min_price is not None and price < min_price:
+            continue
+        if max_price is not None and price > max_price:
+            continue
+        if only_ids is not None and p["id"] not in only_ids:
+            continue
+        if section == "offers" and not on_offer(p):
+            continue
+        if section == "featured" and not p.get("featured"):
+            continue
+        items.append(p)
+    pop = await db.popularity() if (sort == "popular" or section == "best") else {}
+    if section == "best":
+        items = [p for p in items if pop.get(p["id"], 0) > 0]
+        items.sort(key=lambda p: -pop[p["id"]])
+    elif section == "new":
+        items.sort(key=lambda p: -p.get("sort", 0))
+    elif sort == "popular":
+        items.sort(key=lambda p: (-pop.get(p["id"], 0), p.get("sort", 0)))
+    elif sort == "price-asc":
+        items.sort(key=from_price)
+    elif sort == "price-desc":
+        items.sort(key=from_price, reverse=True)
+    elif sort == "name":
+        items.sort(key=lambda p: p["name"].lower())
+    items.sort(key=lambda p: not in_stock(p))  # stable: sold-out products go last
+    return items[:limit] if limit else items
+
+
+async def related(product: dict, limit: int = 4) -> list[dict]:
+    """Other products from the same category, falling back to anything else."""
+    same = [
+        p
+        for p in await db.list_products()
+        if p["cat"] == product["cat"] and p["id"] != product["id"]
+    ]
+    return [p for p in same if in_stock(p)][:limit]

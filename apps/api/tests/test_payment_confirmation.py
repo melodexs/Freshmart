@@ -162,7 +162,7 @@ def test_after_confirming_the_order_moves_on_normally(admin):
     oid = place(admin)["id"]
     confirm(admin, oid)
     url = f"/api/store/admin/orders/{oid}/status"
-    for step in ("Preparing your order", "Out for delivery", "Delivered"):
+    for step in ("Preparing your order", "Ready for dispatch", "Out for delivery", "Delivered"):
         assert admin.post(url, json={"status": step}, headers=STAFF).status_code == 200
 
 

@@ -1,0 +1,3 @@
+<button type="button" class="fav {{ 'on' if on }}" aria-pressed="{{ 'true' if on else 'false' }}"
+        aria-label="{{ 'Remove from favourites' if on else 'Save to favourites' }}"
+        hx-post="/ui/favourites/{{ pid }}" hx-swap="outerHTML">{{ '♥' if on else '♡' }}</button>
