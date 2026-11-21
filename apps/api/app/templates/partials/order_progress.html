@@ -1,8 +1,11 @@
-{# Expects `o` (an order). Shows the status and a progress bar. #}
-{% set pct = progress_map.get(o.status, 0) %}
+{# Expects `o` (an order). A real step-by-step timeline built from the order's actual status. #}
+{% set steps = timeline(o) %}
 <div style="margin-top:6px;"><span class="status-pill">{{ o.status }}</span></div>
-{% if o.status != "Cancelled" %}
-<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pct }}" aria-label="Order progress">
-  <div class="progress-bar" style="width:{{ pct }}%;"></div>
-</div>
-{% endif %}
+<ol class="timeline" aria-label="Order progress for {{ o.id }}">
+  {% for st in steps %}
+  <li class="tl-{{ st.state }}"{% if st.state == "current" %} aria-current="step"{% endif %}>
+    <span class="tl-dot" aria-hidden="true">{% if st.state == "done" %}✓{% elif st.state == "cancelled" %}✕{% endif %}</span>
+    <span class="tl-text"><span class="tl-label">{{ st.label }}</span>{% if st.when %}<small>{{ st.when|local_time }}</small>{% endif %}</span>
+  </li>
+  {% endfor %}
+</ol>

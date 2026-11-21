@@ -2,34 +2,40 @@
 {% block body %}
 <header>
   <div class="topbar">
-    <div class="logo" aria-label="Okwui&#39;s Grocery Store (OGS)"><span class="logo-full">Okwui&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></div>
+    <a class="logo" href="/" aria-label="Okwui&#39;s Grocery Store (OGS) home"><span class="logo-full">Okwui&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></a>
+    <nav class="mainnav" aria-label="Main">
+      <a href="/#catalog">Shop</a>
+      <a href="/#categories">Categories</a>
+      <a href="/#offers">Offers</a>
+      <a href="/#about">About</a>
+      <a href="/#contact">Contact</a>
+    </nav>
     <div class="topbar-spacer"></div>
     <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
-    <button class="icon-btn" id="ordersBtn" type="button"
-            hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML"
-            data-open-modal="ordersOverlay">📦 Orders</button>
-    <button class="icon-btn" id="trackBtn" type="button"
-            hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML"
-            data-open-modal="trackOverlay">🔎 Track</button>
+    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">📦 Orders</button>
+    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">🔎 Track</button>
     <button class="icon-btn" id="cartBtn" type="button">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
   </div>
   <div class="search-row"><div class="wrap"><div class="search" id="filters">
-    <input id="searchInput" name="q" placeholder="Search rice, noodles, drinks..." autocomplete="off"
-           hx-get="/ui/products" hx-trigger="input changed delay:200ms, search"
-           hx-target="#catalog" hx-include="#filters">
+    <input id="searchInput" name="q" type="search" placeholder="Search rice, noodles, drinks..." autocomplete="off" aria-label="Search products"
+           hx-get="/ui/products" hx-trigger="input changed delay:200ms, search" hx-target="#catalog" hx-include="#filters">
     <input type="hidden" id="activeCat" name="cat" value="All">
-    <select id="sortSelect" name="sort" class="sort-select" aria-label="Sort products"
-            hx-get="/ui/products" hx-trigger="change" hx-target="#catalog" hx-include="#filters">
+    <select id="sortSelect" name="sort" class="sort-select" aria-label="Sort products" hx-get="/ui/products" hx-trigger="change" hx-target="#catalog" hx-include="#filters">
       <option value="default">Sort: Featured</option>
+      <option value="popular">Most popular</option>
       <option value="price-asc">Price: low to high</option>
       <option value="price-desc">Price: high to low</option>
       <option value="name">Name: A to Z</option>
     </select>
+    <div class="price-filter" aria-label="Price range">
+      <input id="minPrice" name="min" type="number" inputmode="numeric" min="0" placeholder="Min ₦" aria-label="Minimum price" hx-get="/ui/products" hx-trigger="change, keyup changed delay:400ms" hx-target="#catalog" hx-include="#filters">
+      <input id="maxPrice" name="max" type="number" inputmode="numeric" min="0" placeholder="Max ₦" aria-label="Maximum price" hx-get="/ui/products" hx-trigger="change, keyup changed delay:400ms" hx-target="#catalog" hx-include="#filters">
+    </div>
+    <button type="button" class="chip" id="favFilter" aria-pressed="false" hx-get="/ui/products" hx-vals='{"favs":"1"}' hx-target="#catalog" hx-include="#filters">♡ Favourites</button>
   </div></div></div>
   <nav class="cats"><div class="wrap" id="catNav">
     {% for c in categories %}
-    <button type="button" class="{{ 'active' if c == active }}" hx-get="/ui/products" hx-vals='{"cat": {{ c|tojson|forceescape }}}'
-            hx-include="#filters" hx-target="#catalog">{{ c }}</button>
+    <button type="button" class="{{ 'active' if c == active }}" hx-get="/ui/products" hx-vals='{"cat": {{ c|tojson|forceescape }}}' hx-include="#filters" hx-target="#catalog">{{ c }}</button>
     {% endfor %}
   </div></nav>
 </header>
@@ -38,17 +44,44 @@
   <div class="hero-bg" role="img" aria-label="Shelves packed with groceries inside a neighbourhood provision store"></div>
   <div class="wrap hero-flex">
     <div class="hero-text">
-      <div class="pill">Delivering across Otukpo • Order today, pick your slot</div>
-      <h1>Groceries and snacks, brought to your door</h1>
-      <p>Preorder food staples, drinks and household basics. Pay on delivery, or pay ahead by card, bank transfer or USSD.</p>
+      <div class="pill">Delivering across Otukpo, Benue State</div>
+      <h1>Everything fresh. Everything you need.</h1>
+      <p>Shop your everyday groceries, fresh foodstuff and household essentials from Okwui&#39;s Grocery Store. Quality products delivered conveniently to your doorstep.</p>
+      <div class="hero-cta"><a class="btn-primary hero-btn" href="#catalog">Shop now</a><a class="btn-ghost hero-btn light" href="#categories">Explore categories</a></div>
     </div>
   </div>
 </div>
 
 <section class="wrap info-strip" aria-label="How ordering works">
-  <div class="info-item"><strong>🚚 Delivery in Otukpo</strong><span>A flat {{ delivery_fee|naira }} delivery fee on every order.</span></div>
-  <div class="info-item"><strong>💳 Pay your way</strong><span>Pay on delivery, or pay ahead by card, bank transfer or USSD.</span></div>
+  <div class="info-item"><strong>🚚 Delivery in Otukpo</strong><span>Delivery from {{ areas|map(attribute="fee")|min|naira }}, depending on your area. You see the exact fee at checkout.</span></div>
+  <div class="info-item"><strong>💳 Pay your way</strong><span>Pay on delivery{% if bank.ready %}, or pay ahead by bank transfer{% endif %}.</span></div>
   <div class="info-item"><strong>📦 Track every order</strong><span>Use the Track button with your reference and phone number.</span></div>
+</section>
+
+<section class="wrap" id="categories" aria-labelledby="catTitle">
+  <div class="section-title"><h2 id="catTitle">Shop by category</h2></div>
+  <div class="cat-cards">
+    {% for c in category_cards %}
+    <button type="button" class="cat-card" hx-get="/ui/products" hx-vals='{"cat": {{ c.name|tojson|forceescape }}}' hx-target="#catalog" data-scroll="#catalog">
+      <span class="cat-ico" aria-hidden="true">{{ c.emoji }}</span><strong>{{ c.name }}</strong><small>{{ c.count }} product{{ "" if c.count == 1 else "s" }}</small>
+    </button>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="wrap shelves" id="offers" aria-label="Featured shelves">
+  {% for sh in shelves %}{% if sh["items"] %}
+  <div class="shelf-block">
+    <div class="section-title"><h2>{{ sh.title }}</h2><button type="button" class="btn-link" hx-get="/ui/products" hx-vals='{"section": "{{ sh.key }}"}' hx-target="#catalog" data-scroll="#catalog">See all</button></div>
+    <div class="shelf-row">
+      {% for p in sh["items"] %}
+      <a class="mini-card" href="/product/{{ p.id }}"><div class="thumb"{% if p.id|frame_colour %} style="--frame:{{ p.id|frame_colour }}"{% endif %}>{{ p|product_art }}</div>
+        <span class="mini-name">{{ p.name }}</span>
+        <span class="mini-price">{{ p.options[0].price|naira }}{% if discount(p, 0) %} <s>{{ p.comparePrices[0]|naira }}</s>{% endif %}</span></a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}{% endfor %}
 </section>
 
 {% if whatsapp %}
@@ -61,6 +94,35 @@
 </main>
 
 <button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
+
+<section class="wrap trust" aria-labelledby="trustTitle">
+  <div class="section-title"><h2 id="trustTitle">Why shop with OGS</h2></div>
+  <div class="trust-grid">
+    <div><strong>🥬 Quality groceries</strong><span>Staples, produce, drinks and household basics, picked for everyday cooking.</span></div>
+    <div><strong>🛒 Convenient shopping</strong><span>Browse, search and order from your phone in a few taps.</span></div>
+    <div><strong>🔒 Safe payment</strong><span>Pay on delivery, or by bank transfer. We never ask for your card details.</span></div>
+    <div><strong>🚚 Reliable delivery</strong><span>Delivered to your door across Otukpo, and you can track every order.</span></div>
+    <div><strong>💬 Friendly support</strong><span>Talk to us by phone or WhatsApp whenever you need help.</span></div>
+  </div>
+</section>
+
+<section class="wrap faq" id="about" aria-labelledby="faqTitle">
+  <div class="section-title"><h2 id="faqTitle">Questions, answered</h2></div>
+  <details><summary>Where do you deliver?</summary><p>We deliver in {{ areas|map(attribute="name")|join(", ") }}. Each area has its own delivery fee, which you see before you place an order.</p></details>
+  <details><summary>How can I pay?</summary><p>Pay the rider when your order arrives{% if bank.ready %}, or pay ahead by bank transfer. A pay-ahead order is packed once we confirm your payment{% endif %}. We never ask for card details on this site.</p></details>
+  <details><summary>How do I track my order?</summary><p>Tap Track, then enter your order reference and the phone number you used. You will see where your order is.</p></details>
+  <details><summary>Can I cancel an order?</summary><p>Yes, from My Orders, until it leaves the store.</p></details>
+  <details><summary>What if an item is out of stock?</summary><p>It is marked out of stock and cannot be added to your cart. Items with low stock show how many are left.</p></details>
+</section>
+
+<section class="wrap contact" id="contact" aria-labelledby="contactTitle">
+  <div class="section-title"><h2 id="contactTitle">Get in touch</h2></div>
+  <p>Okwui&#39;s Grocery Store is in Otukpo, Benue State, Nigeria.{% if not whatsapp and not contact_phone %} Contact details will appear here soon.{% endif %}</p>
+  <div class="contact-actions">
+    {% if whatsapp %}<a class="btn-primary" style="text-decoration:none" href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>{% endif %}
+    {% if contact_phone %}<a class="btn-ghost" style="text-decoration:none" href="tel:{{ contact_phone }}">Call {{ contact_phone }}</a>{% endif %}
+  </div>
+</section>
 
 <footer class="site-footer">
   <div class="wrap">
@@ -87,7 +149,6 @@
 
 <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top" hidden>↑</button>
 
-<div id="smsToast" class="toast toast-sms" role="status" style="display:none;"></div>
 <div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
 
 {% include "partials/modals.html" %}

@@ -14,7 +14,15 @@ from pathlib import Path
 from . import config
 
 _lock = threading.Lock()
-EMPTY = {"users": {}, "orders": [], "storeSms": [], "products": {}, "settings": {}, "audit": []}
+EMPTY = {
+    "users": {},
+    "orders": [],
+    "storeSms": [],
+    "products": {},
+    "settings": {},
+    "audit": [],
+    "favourites": {},
+}
 
 
 def _path() -> Path:
@@ -256,3 +264,39 @@ async def confirm_payment(order_id: str, expected_from: str, new_status: str, re
                 _write(data)
                 return True
         return False
+
+
+async def get_favourites(email: str) -> list[str]:
+    with _lock:
+        return list(_read()["favourites"].get(email, []))
+
+
+async def add_favourite(email: str, product_id: str) -> None:
+    with _lock:
+        data = _read()
+        favs = data["favourites"].setdefault(email, [])
+        if product_id not in favs:
+            favs.insert(0, product_id)
+            _write(data)
+
+
+async def remove_favourite(email: str, product_id: str) -> None:
+    with _lock:
+        data = _read()
+        favs = data["favourites"].get(email, [])
+        if product_id in favs:
+            favs.remove(product_id)
+            _write(data)
+
+
+async def popularity() -> dict[str, int]:
+    with _lock:
+        orders = list(_read()["orders"])
+    out: dict[str, int] = {}
+    for o in orders:
+        if o["status"] == "Cancelled":
+            continue
+        for i in o["items"]:
+            if i.get("productId"):
+                out[i["productId"]] = out.get(i["productId"], 0) + int(i.get("qty", 0))
+    return out

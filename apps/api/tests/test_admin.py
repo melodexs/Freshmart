@@ -208,7 +208,7 @@ def test_staff_moves_an_order_through_its_stages_and_cannot_skip(admin):
     url = f"/api/store/admin/orders/{oid}/status"
     skip = admin.post(url, json={"status": "Delivered"}, headers=STAFF)
     assert skip.status_code == 409
-    for step in ("Preparing your order", "Out for delivery", "Delivered"):
+    for step in ("Preparing your order", "Ready for dispatch", "Out for delivery", "Delivered"):
         assert admin.post(url, json={"status": step}, headers=STAFF).status_code == 200
     assert admin.post(url, json={"status": "Cancelled"}, headers=STAFF).status_code == 409
     assert (

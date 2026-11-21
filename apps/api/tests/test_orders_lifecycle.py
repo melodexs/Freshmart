@@ -70,7 +70,12 @@ def test_staff_can_walk_an_order_to_delivered(client, monkeypatch):
     signup(client)
     o = place(client)
     staff(client, monkeypatch)
-    for target in (order_status.PREPARING, order_status.OUT, order_status.DELIVERED):
+    for target in (
+        order_status.PREPARING,
+        order_status.READY,
+        order_status.OUT,
+        order_status.DELIVERED,
+    ):
         r = client.post(f"/api/store/ui/orders/{o['id']}/status", data={"status": target})
         assert r.status_code == 200 and f"is now: {target}" in r.text
         assert status_of(client, o["id"]) == target
@@ -149,7 +154,7 @@ def test_customer_cannot_cancel_once_out_for_delivery(client, monkeypatch):
     signup(client)
     o = place(client)
     staff(client, monkeypatch)
-    for target in (order_status.PREPARING, order_status.OUT):
+    for target in (order_status.PREPARING, order_status.READY, order_status.OUT):
         client.post(f"/api/store/ui/orders/{o['id']}/status", data={"status": target})
     r = client.post(f"/ui/orders/{o['id']}/cancel")
     assert "can no longer be cancelled" in r.text
@@ -161,7 +166,7 @@ def test_cancel_button_only_shown_while_cancellable(client, monkeypatch):
     o = place(client)
     assert "Cancel order" in client.get("/ui/orders").text
     staff(client, monkeypatch)
-    for target in (order_status.PREPARING, order_status.OUT):
+    for target in (order_status.PREPARING, order_status.READY, order_status.OUT):
         client.post(f"/api/store/ui/orders/{o['id']}/status", data={"status": target})
     assert "Cancel order" not in client.get("/ui/orders").text
 
@@ -238,3 +243,19 @@ def test_staff_feed_summarises_orders_by_status(client, monkeypatch):
     html = client.get("/api/store/ui").text
     assert 'aria-label="Orders by status"' in html
     assert "Awaiting delivery — pay on arrival: 2" in html
+
+
+def test_a_customer_cannot_cancel_once_the_order_is_packed_but_staff_still_can(client, monkeypatch):
+    signup(client)
+    o = place(client)
+    staff(client, monkeypatch)
+    for target in (order_status.PREPARING, order_status.READY):
+        client.post(f"/api/store/ui/orders/{o['id']}/status", data={"status": target})
+    assert status_of(client, o["id"]) == order_status.READY
+    assert "Cancel order" not in client.get("/ui/orders").text
+    client.post(f"/ui/orders/{o['id']}/cancel")
+    assert status_of(client, o["id"]) == order_status.READY, (
+        "a packed order is not customer-cancellable"
+    )
+    client.post(f"/api/store/ui/orders/{o['id']}/status", data={"status": order_status.CANCELLED})
+    assert status_of(client, o["id"]) == order_status.CANCELLED

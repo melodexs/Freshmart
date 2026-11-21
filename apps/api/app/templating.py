@@ -38,6 +38,7 @@ templates.env.filters["local_time"] = local_time
 from . import order_status  # noqa: E402
 
 templates.env.globals["progress_map"] = order_status.PROGRESS
+templates.env.globals["timeline"] = order_status.timeline
 templates.env.globals["cancellable"] = order_status.CUSTOMER_CAN_CANCEL_FROM
 
 from markupsafe import Markup  # noqa: E402
