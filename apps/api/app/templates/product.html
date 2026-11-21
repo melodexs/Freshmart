@@ -60,6 +60,8 @@
   {% endif %}
 </main>
 {% include "partials/site_footer.html" %}
+<button id="cartFab" class="cart-fab" aria-label="Open cart">🛒<span class="fab-count" id="fabCartCount">0</span></button>
+<button id="backToTop" class="back-to-top" type="button" aria-label="Back to top" hidden>↑</button>
 <div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
 {% include "partials/modals.html" %}
 <script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee, "areas": areas, "bank": bank}|tojson }}</script>

@@ -207,9 +207,12 @@ def test_product_page_escapes_admin_typed_text(client):
     assert "<script>alert(1)</script>" not in h and "&lt;script&gt;" in h and "<b>X</b>" not in h
 
 
-def test_favourites_need_sign_in(client):
+def test_favourites_need_sign_in_and_ask_the_page_to_open_the_sign_in_dialog(client):
     r = client.post("/ui/favourites/p1")
-    assert r.status_code == 401 and "Sign in" in r.text
+    assert r.status_code == 200, "htmx ignores error responses, so the visitor would see nothing"
+    assert "need-signin" in r.headers["hx-trigger"] and "Sign in to save" in r.headers["hx-trigger"]
+    assert "♡" in r.text and 'aria-pressed="false"' in r.text, "the heart stays off"
+    assert cards(client.get("/ui/products", params={"favs": "1"}).text) == []
 
 
 def test_favourites_toggle_and_persist_per_customer(client):
@@ -247,3 +250,19 @@ def test_section_headings_match_what_is_shown(client):
     assert "Best sellers" in client.get("/ui/products", params={"section": "best"}).text
     assert "Your favourites" in client.get("/ui/products", params={"favs": "1"}).text
     assert "Foodstuff" in client.get("/ui/products", params={"cat": "Foodstuff"}).text
+
+
+def test_every_page_that_loads_the_shop_script_has_every_element_it_requires(client):
+    """The script throws on start-up if an element it needs is missing, and the cart then silently
+    stops working. Check each page against the ids the script actually asks for."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "web" / "src"
+    needed = set()
+    for f in src.glob("*.ts"):
+        needed |= set(re.findall(r'\$(?:<[^>]+>)?\("([A-Za-z]+)"\)', f.read_text()))
+    # elements the checkout, cart and toasts create or fill are in the shared pages; check each page
+    pages = {"/": client.get("/").text, "/product/p1": client.get("/product/p1").text}
+    for url, html in pages.items():
+        missing = sorted(i for i in needed if f'id="{i}"' not in html)
+        assert not missing, f"{url} is missing elements the script needs: {missing}"

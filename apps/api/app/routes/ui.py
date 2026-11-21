@@ -188,10 +188,10 @@ async def toggle_favourite(request: Request, product_id: str):
     """Add or remove a favourite for the signed-in customer. Returns the heart button."""
     user = auth.current_user(request)
     if not user:
-        return HTMLResponse(
-            '<span class="fav-note" role="status">Sign in to save favourites</span>',
-            status_code=401,
-        )
+        # Leave the heart as it is and ask the page to open the sign-in dialog. (htmx ignores the
+        # body of an error response, so a 401 here would show the visitor nothing at all.)
+        resp = _render(request, "partials/fav_button.html", pid=product_id, on=False)
+        return _trigger(resp, "need-signin", {"message": "Sign in to save your favourites."})
     if not await db.get_product(product_id):
         return HTMLResponse("", status_code=404)
     favs = await db.get_favourites(user["email"])
