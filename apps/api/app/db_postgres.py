@@ -62,6 +62,11 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS addresses (
+              id TEXT PRIMARY KEY, email TEXT NOT NULL, label TEXT NOT NULL, area TEXT NOT NULL,
+              address TEXT NOT NULL, phone TEXT NOT NULL, is_default BOOLEAN NOT NULL DEFAULT FALSE,
+              created TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE INDEX IF NOT EXISTS addresses_email_idx ON addresses (email);
             CREATE TABLE IF NOT EXISTS favourites (
               email TEXT NOT NULL, product_id TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (email, product_id));
@@ -435,3 +440,53 @@ async def popularity() -> dict[str, int]:
             if i.get("productId"):
                 out[i["productId"]] = out.get(i["productId"], 0) + int(i.get("qty", 0))
     return out
+
+
+def _addr(r) -> dict:
+    return {
+        "id": r["id"],
+        "label": r["label"],
+        "area": r["area"],
+        "address": r["address"],
+        "phone": r["phone"],
+        "isDefault": r["is_default"],
+    }
+
+
+async def list_addresses(email: str) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT * FROM addresses WHERE email=$1 ORDER BY is_default DESC, created", email
+        )
+    return [_addr(r) for r in rows]
+
+
+async def save_address(email: str, a: dict) -> None:
+    """Insert or replace one of this customer's addresses. Setting a default clears the others."""
+    async with _pool.acquire() as c, c.transaction():
+        if a["isDefault"]:
+            await c.execute("UPDATE addresses SET is_default=FALSE WHERE email=$1", email)
+        await c.execute(
+            """INSERT INTO addresses (id,email,label,area,address,phone,is_default)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (id) DO UPDATE SET label=$3, area=$4, address=$5, phone=$6, is_default=$7
+               WHERE addresses.email=$2""",
+            a["id"],
+            email,
+            a["label"],
+            a["area"],
+            a["address"],
+            a["phone"],
+            a["isDefault"],
+        )
+
+
+async def delete_address(email: str, address_id: str) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute("DELETE FROM addresses WHERE id=$1 AND email=$2", address_id, email)
+    return res.endswith(" 1")
+
+
+async def update_profile(email: str, name: str, phone: str) -> None:
+    async with _pool.acquire() as c:
+        await c.execute("UPDATE users SET name=$2, phone=$3 WHERE email=$1", email, name, phone)

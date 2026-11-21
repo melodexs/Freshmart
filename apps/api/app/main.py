@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import catalogue, config, db
+from .routes import account as account_routes
 from .routes import admin as admin_routes
 from .routes import auth as auth_routes
 from .routes import orders as order_routes
@@ -127,6 +128,7 @@ app.include_router(product_routes.router, prefix="/api/products")
 app.include_router(order_routes.router, prefix="/api/orders")
 app.include_router(store_routes.router, prefix="/api/store")
 app.include_router(admin_routes.router, prefix="/api/store/admin")
+app.include_router(account_routes.router, prefix="/api/account")
 app.include_router(ui_routes.router)
 
 

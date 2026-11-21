@@ -267,7 +267,7 @@ function init(): void {
   initModals();
   initReorder();
   initBackToTop();
-  void initCart();
+  const cartReady = initCart();
   initCheckout();
   initAuthEvents();
   setCheckoutHandler(openCheckout);
@@ -278,6 +278,18 @@ function init(): void {
   });
   $("confirmClose").onclick = () => hide($("confirmOverlay"));
   rehydrateGrid();
+  handleEntryLinks(cartReady);
+}
+
+/** Links from the account page: ?cart=1 opens the cart (after it has been restored), ?signin=1 asks to sign in. */
+function handleEntryLinks(cartReady: Promise<unknown>): void {
+  const params = new URLSearchParams(location.search);
+  const wantsCart = params.get("cart") === "1";
+  const wantsSignIn = params.get("signin") === "1";
+  if (!wantsCart && !wantsSignIn) return;
+  history.replaceState(null, "", location.pathname);
+  if (wantsCart) void cartReady.then(() => openCart());
+  if (wantsSignIn && !signedIn) promptSignIn("Please sign in to see your account.");
 }
 
 document.addEventListener("DOMContentLoaded", init);
