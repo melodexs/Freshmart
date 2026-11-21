@@ -115,16 +115,44 @@ async function orders(root) {
   await load();
 }
 function orderRow(o, reload) {
-  const next = { "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
-  const act = next.length ? h("select", { "aria-label": "Move order " + o.id, onchange: async (e) => {
+  const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
+  const move = next.length ? h("select", { "aria-label": "Move order " + o.id, onchange: async (e) => {
     const to = e.target.value; if (!to) return;
     if (to === "Cancelled" && !confirm(`Cancel order ${o.id}? Its stock goes back on the shelf.`)) { e.target.value = ""; return; }
     try { await api(`/orders/${encodeURIComponent(o.id)}/status`, { method: "POST", body: { status: to } }); toast(`${o.id}: ${to}`); reload(); } catch (err) { toast(err.message, true); e.target.value = ""; }
   } }, h("option", { value: "", text: "Move to…" }), next.map((s) => h("option", { value: s, text: s }))) : h("span", { class: "muted", text: "Final" });
+  const pay = o.status === "Awaiting payment" ? h("button", { class: "btn sm primary", style: "margin-bottom:6px", onclick: () => confirmPayment(o, reload), text: "Confirm payment" }) : null;
+  const paid = o.paymentDetail && o.paymentDetail.paid ? h("div", { class: "muted", text: `Paid ${naira(o.paymentDetail.paidAmount)} by ${o.paymentDetail.paidMethod}, ref ${o.paymentDetail.paidReference}` }) : null;
   return h("tr", {}, h("td", {}, h("strong", { text: o.id }), h("div", { class: "muted", text: when(o.date) })),
-    h("td", {}, h("div", { text: o.phone }), h("div", { class: "muted", text: o.user }), h("div", { class: "muted", text: [o.address, o.city].filter(Boolean).join(", ") })),
+    h("td", {}, o.customerName ? h("div", { text: o.customerName }) : null, h("div", { text: o.phone }), h("div", { class: "muted", text: o.user }), h("div", { class: "muted", text: [o.address, o.city].filter(Boolean).join(", ") }), o.instructions ? h("div", { class: "muted", text: "Note: " + o.instructions }) : null),
     h("td", {}, o.items.map((i) => h("div", { text: `${i.qty}× ${i.name}` }))),
-    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Paid ahead" : "Pay on delivery" })), h("td", {}, act));
+    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Pay before delivery" : "Pay on delivery" }), paid), h("td", {}, pay, h("div", {}, move), h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => history_(o), text: "History" })));
+}
+
+function confirmPayment(o, reload) {
+  const msg = h("p", { class: "msg", role: "alert" });
+  const amount = h("input", { type: "number", min: "1", value: o.total, "aria-label": "Amount received in naira" });
+  const method = h("select", { "aria-label": "How it was paid" }, ["bank transfer", "ussd", "cash", "pos", "other"].map((m) => h("option", { value: m, text: m })));
+  const ref = h("input", { maxlength: "80", placeholder: "Bank or transfer reference", "aria-label": "Payment reference" });
+  const form = h("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault(); msg.textContent = "";
+    try { await api(`/orders/${encodeURIComponent(o.id)}/confirm-payment`, { method: "POST", body: { amount: Number(amount.value), method: method.value, reference: ref.value } }); toast(`Payment confirmed for ${o.id}`); close(); reload(); } catch (err) { msg.textContent = err.message; }
+  } },
+    h("p", {}, "Only confirm after you have seen the money in your account. This is recorded permanently with the time and the reference."),
+    h("p", {}, h("strong", { text: `Order ${o.id}: ${naira(o.total)} due` })),
+    h("div", {}, h("label", { text: "Amount received (₦)" }), amount), h("div", {}, h("label", { text: "How was it paid?" }), method), h("div", {}, h("label", { text: "Reference" }), ref), msg,
+    h("div", { style: "display:flex;gap:8px" }, h("button", { class: "btn primary", type: "submit", text: "Confirm payment received" }), h("button", { class: "btn", type: "button", onclick: () => close(), text: "Cancel" })));
+  const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Confirm payment" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: "Confirm payment" }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(modal); ref.focus();
+}
+
+async function history_(o) {
+  let d; try { d = await api(`/audit?subject=${encodeURIComponent(o.id)}`); } catch (err) { toast(err.message, true); return; }
+  const rows = d.entries.map((e) => h("tr", {}, h("td", { text: when(e.at) }), h("td", { text: e.action.replace(/_/g, " ") }), h("td", { text: Object.entries(e.detail).map(([k, v]) => `${k}: ${v}`).join(", ") })));
+  const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Order history" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: "History for " + o.id }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => modal.remove(), text: "✕" })), table(["When", "What", "Details"], rows, "Nothing recorded yet.")));
+  document.body.append(modal);
 }
 
 // ---------- products ----------
@@ -205,18 +233,31 @@ async function settings(root) {
   const s = await api("/settings");
   const msg = h("p", { class: "msg", role: "alert" });
   const inp = (id, label, val, extra = {}) => h("div", {}, h("label", { for: id, text: label }), h("input", { id, value: val, ...extra }));
+  const areas = s.areas.map((a) => ({ name: a.name, fee: a.fee }));
+  const areaBox = h("div");
+  const drawAreas = () => areaBox.replaceChildren(...areas.map((a, i) => h("div", { class: "optrow", style: "grid-template-columns:2fr 1fr auto" },
+    h("input", { value: a.name, placeholder: "Area name", "aria-label": "Area name", oninput: (e) => (a.name = e.target.value) }),
+    h("input", { type: "number", min: "0", max: "100000", value: a.fee, placeholder: "Fee ₦", "aria-label": "Delivery fee in naira", oninput: (e) => (a.fee = e.target.value) }),
+    h("button", { type: "button", class: "btn sm danger", "aria-label": "Remove area", onclick: () => { if (areas.length > 1) { areas.splice(i, 1); drawAreas(); } }, text: "✕" }))));
+  drawAreas();
   const form = h("form", { class: "form panel", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
-    try { await api("/settings", { method: "PUT", body: { deliveryFee: Number($("#sFee").value), storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value } }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
+    const body = { storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value,
+      areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee) })),
+      bank: { bank: $("#sBank").value, accountName: $("#sAcctName").value, accountNumber: $("#sAcctNo").value } };
+    try { await api("/settings", { method: "PUT", body }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
   } },
-    h("h2", { text: "Store settings" }),
-    inp("sFee", "Delivery fee (₦)", s.deliveryFee, { type: "number", min: "0", max: "100000", required: true }),
-    inp("sName", "Store name", s.storeName, { maxlength: "80" }),
-    inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
-    inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }),
-    inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),
+    h("h2", { text: "Delivery areas and fees" }),
+    h("p", { class: "muted", text: "Customers choose one of these at checkout, and the fee is looked up on the server. The first area is the default." }),
+    areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "" }); drawAreas(); } }, text: "+ Add area" }),
+    h("h2", { style: "margin-top:18px", text: "Bank account for pay-before-delivery" }),
+    h("p", { class: "muted", text: s.bank.ready ? "Customers can pay by bank transfer to this account." : "Pay-before-delivery is OFF until you enter your real account. Nothing is shown to customers until all three fields are filled." }),
+    inp("sBank", "Bank", s.bank.bank, { maxlength: "60" }), inp("sAcctName", "Account name", s.bank.accountName, { maxlength: "80" }), inp("sAcctNo", "Account number (10 digits)", s.bank.accountNumber, { inputmode: "numeric", maxlength: "13" }),
+    h("h2", { style: "margin-top:18px", text: "Store details" }),
+    inp("sName", "Store name", s.storeName, { maxlength: "80" }), inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
+    inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }), inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),
     msg, h("button", { class: "btn primary", type: "submit", text: "Save settings" }),
-    h("p", { class: "muted", text: "Per-area delivery fees, discount codes, payments and notifications are not built yet." }));
+    h("p", { class: "muted", text: "Discount codes, image upload, online payment and SMS or WhatsApp notifications are not built yet." }));
   root.replaceChildren(form);
 }
 
