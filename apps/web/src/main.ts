@@ -165,6 +165,11 @@ function initAuthEvents(): void {
     }
   });
 
+  document.body.addEventListener("need-signin", (e) => {
+    const detail = ((e as CustomEvent).detail ?? {}) as { message?: string };
+    promptSignIn(detail.message ?? "Please sign in to continue.");
+  });
+
   document.body.addEventListener("signed-in", (e) => {
     // The server puts the details in the HX-Trigger header (the swapped HTML isn't in the page yet).
     const detail = ((e as CustomEvent).detail ?? {}) as { email?: string; firstName?: string };
