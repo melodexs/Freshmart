@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from ..products import DELIVERY_FEE, PRODUCTS
+from .. import catalogue
 
 router = APIRouter()
 
@@ -8,4 +8,7 @@ router = APIRouter()
 @router.get("")
 @router.get("/")
 async def list_products():
-    return {"products": PRODUCTS, "deliveryFee": DELIVERY_FEE}
+    return {
+        "products": await catalogue.all_products(),
+        "deliveryFee": await catalogue.delivery_fee(),
+    }

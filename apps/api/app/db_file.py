@@ -14,7 +14,7 @@ from pathlib import Path
 from . import config
 
 _lock = threading.Lock()
-EMPTY = {"users": {}, "orders": [], "storeSms": []}
+EMPTY = {"users": {}, "orders": [], "storeSms": [], "products": {}, "settings": {}}
 
 
 def _path() -> Path:
@@ -125,3 +125,94 @@ async def ping() -> None:
     query and raises when the database is unreachable.
     """
     return None
+
+
+# ---------- catalogue ----------
+
+
+def _sorted(products) -> list[dict]:
+    return sorted(products, key=lambda p: (p.get("sort", 0), p["name"]))
+
+
+async def list_products(include_inactive: bool = False) -> list[dict]:
+    with _lock:
+        items = list(_read()["products"].values())
+    return _sorted(p for p in items if include_inactive or p.get("active", True))
+
+
+async def get_product(product_id: str) -> dict | None:
+    with _lock:
+        return _read()["products"].get(product_id)
+
+
+async def save_product(p: dict) -> None:
+    with _lock:
+        data = _read()
+        data["products"][p["id"]] = {
+            "id": p["id"],
+            "name": p["name"],
+            "cat": p["cat"],
+            "emoji": p.get("emoji", ""),
+            "description": p.get("description", ""),
+            "image": p.get("image", ""),
+            "options": p["options"],
+            "comparePrices": p.get("comparePrices") or [],
+            "stock": p.get("stock"),
+            "active": bool(p.get("active", True)),
+            "featured": bool(p.get("featured", False)),
+            "sort": int(p.get("sort", 0)),
+        }
+        _write(data)
+
+
+async def delete_product(product_id: str) -> bool:
+    with _lock:
+        data = _read()
+        if product_id not in data["products"]:
+            return False
+        del data["products"][product_id]
+        _write(data)
+        return True
+
+
+async def count_products() -> int:
+    with _lock:
+        return len(_read()["products"])
+
+
+async def adjust_stock(product_id: str, delta: int) -> int | None:
+    with _lock:
+        data = _read()
+        p = data["products"].get(product_id)
+        if p is None or p.get("stock") is None:
+            return None
+        p["stock"] = max(p["stock"] + delta, 0)
+        _write(data)
+        return p["stock"]
+
+
+async def get_setting(key: str, default=None):
+    with _lock:
+        return _read()["settings"].get(key, default)
+
+
+async def set_setting(key: str, value) -> None:
+    with _lock:
+        data = _read()
+        data["settings"][key] = value
+        _write(data)
+
+
+async def reserve_stock(product_id: str, qty: int) -> bool:
+    with _lock:
+        data = _read()
+        p = data["products"].get(product_id)
+        if p is None:
+            return False
+        if p.get("stock") is None:
+            return True
+        if p["stock"] < qty:
+            return False
+        p["stock"] -= qty
+        _write(data)
+        return True

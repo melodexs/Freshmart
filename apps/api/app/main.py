@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import config, db
+from . import catalogue, config, db
 from .routes import auth as auth_routes
 from .routes import orders as order_routes
 from .routes import products as product_routes
@@ -22,6 +22,9 @@ from .templating import templates
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
+    seeded = await catalogue.seed_if_empty()
+    if seeded:
+        print(f"Catalogue was empty: loaded {seeded} starter products")
     mode = "Postgres" if config.USE_POSTGRES else "local JSON file"
     print(f"OGS backend (Python) running, data store: {mode}")
     yield
