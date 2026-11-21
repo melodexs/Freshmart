@@ -1,3 +1,4 @@
+import { postJson, errorMessage } from "./api";
 import { $, clear, h, hide, money, show } from "./dom";
 import { fetchCatalog, loadCart, saveCart } from "./persist";
 import type { CartEntry, CartLine, Product } from "./types";
@@ -14,10 +15,19 @@ export function setDeliveryFee(fee: number): void {
 export function getDeliveryFee(): number {
   return deliveryFee;
 }
+/** A discount the server has previewed for the current basket. Only a preview: the server prices the real order. */
+let applied: { code: string; amount: number } | null = null;
+export function appliedDiscount(): { code: string; amount: number } | null {
+  return applied;
+}
+export function setAppliedDiscount(d: { code: string; amount: number } | null): void {
+  applied = d;
+}
 export function onCartChange(fn: () => void): void {
   listeners.push(fn);
 }
 function notify(): void {
+  applied = null; // the basket changed, so any previewed saving may no longer be right
   saveCart(cart);
   const clearBtn = document.getElementById("clearCartBtn");
   if (clearBtn) clearBtn.hidden = cart.size === 0;
@@ -54,7 +64,7 @@ export function subtotal(): number {
   return lines().reduce((a, l) => a + l.subtotal, 0);
 }
 export function total(): number {
-  return subtotal() + deliveryFee;
+  return subtotal() - (applied?.amount ?? 0) + deliveryFee;
 }
 
 export function changeQty(key: string, delta: number): void {
@@ -229,8 +239,53 @@ function renderDrawer(): void {
     h("div", { class: cls }, h("span", { text: label }), h("span", { text: value }));
   const go = h("button", { class: "btn-primary", id: "goCheckout", type: "button", text: "Checkout" });
   go.onclick = () => onCheckout();
+  const codeNote = h("div", { class: "code-note", role: "status" });
+  const codeInput = h("input", {
+    id: "discountInput",
+    class: "code-input",
+    type: "text",
+    placeholder: "Discount code",
+    autocomplete: "off",
+    maxlength: "24",
+    "aria-label": "Discount code",
+  }) as HTMLInputElement;
+  const applyBtn = h("button", { class: "btn-ghost code-apply", id: "discountApply", type: "button", text: "Apply" });
+  applyBtn.onclick = async () => {
+    const code = codeInput.value.trim();
+    if (!code) return;
+    applyBtn.setAttribute("disabled", "");
+    codeNote.className = "code-note";
+    codeNote.textContent = "Checking…";
+    try {
+      const items = lines().map((l) => {
+        const [productId, optionIndex] = l.key.split("|");
+        return { productId, optionIndex: Number(optionIndex), qty: l.qty };
+      });
+      const r = await postJson<{ code: string; discount: number }>("/api/orders/discount-check", { items, code });
+      applied = { code: r.code, amount: r.discount };
+      renderDrawer();
+    } catch (err) {
+      const e = err as { error?: string; detail?: string };
+      const needsSignIn = !e.error && typeof e.detail === "string";
+      codeNote.className = "code-note bad";
+      codeNote.textContent = needsSignIn ? "Please sign in to use a discount code." : errorMessage(err, "That code could not be checked.");
+    } finally {
+      applyBtn.removeAttribute("disabled");
+    }
+  };
+  const removeCode = h("button", { class: "linkish", type: "button", text: "Remove" });
+  removeCode.onclick = () => {
+    applied = null;
+    renderDrawer();
+  };
+  const codeRow = applied
+    ? h("div", { class: "code-row on" }, h("span", { text: `Code ${applied.code} applied` }), removeCode)
+    : h("div", { class: "code-row" }, codeInput, applyBtn);
   foot.append(
+    codeRow,
+    codeNote,
     row("Subtotal", money(subtotal())),
+    ...(applied ? [row(`Discount (${applied.code})`, `−${money(applied.amount)}`, "totals-row saving")] : []),
     row("Delivery fee", money(deliveryFee)),
     row("Total", money(total()), "totals-row grand"),
     go,
