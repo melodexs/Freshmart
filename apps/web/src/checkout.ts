@@ -10,6 +10,7 @@ import {
   lines,
   onCartChange,
   subtotal,
+  appliedDiscount,
   total,
 } from "./cart";
 import type { PayMethod, PlacedOrder } from "./types";
@@ -151,6 +152,7 @@ function renderSummary(): void {
     h("div", { class: cls }, h("span", { text: label }), h("span", { text: value }));
   box.append(
     row("Subtotal", money(subtotal())),
+    ...(appliedDiscount() ? [row(`Discount (${appliedDiscount()!.code})`, `−${money(appliedDiscount()!.amount)}`, "totals-row saving")] : []),
     row("Delivery fee", money(getDeliveryFee())),
     row("Total", money(total()), "totals-row grand"),
   );
@@ -258,6 +260,7 @@ async function placeOrder(): Promise<void> {
       city: val("coArea"),
       instructions: val("coNote"),
       payMethod: selectedPay,
+      discountCode: appliedDiscount()?.code ?? "",
     });
     clearCart();
     hide($("checkoutOverlay"));

@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, orders, products, customers, settings };
-const titles = { overview: "Overview", orders: "Orders", products: "Products", customers: "Customers", settings: "Store settings" };
+const views = { overview, orders, products, discounts, customers, settings };
+const titles = { overview: "Overview", orders: "Orders", products: "Products", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -240,6 +240,55 @@ function editor(p, done) {
   function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); }
   document.addEventListener("keydown", onKey); document.body.append(dl, modal);
   (isNew ? form.querySelector("input") : form.querySelector("input")).focus();
+}
+
+// ---------- discount codes ----------
+function describeCode(c) {
+  const what = c.kind === "percent" ? `${c.value}% off` : `${naira(c.value)} off`;
+  const bits = [what];
+  if (c.maxDiscount) bits.push(`up to ${naira(c.maxDiscount)}`);
+  if (c.minOrder) bits.push(`orders from ${naira(c.minOrder)}`);
+  bits.push(c.perCustomerOnce ? "once per customer" : "repeatable");
+  if (c.endsAt) bits.push(`ends ${new Date(c.endsAt).toLocaleDateString("en-NG")}`);
+  return bits.join(" · ");
+}
+async function discounts(root) {
+  const d = await api("/discounts");
+  const list = table(["Code", "What it does", "Used", "Given away", "Status", ""], d.codes.map((c) => {
+    const expired = c.endsAt && new Date(c.endsAt) <= new Date();
+    const full = c.maxUses && c.used >= c.maxUses;
+    const state = !c.active ? "Paused" : expired ? "Expired" : full ? "Used up" : "Live";
+    return h("tr", {}, h("td", {}, h("strong", { text: c.code }), c.note ? h("div", { class: "muted", text: c.note }) : null), h("td", { text: describeCode(c) }),
+      h("td", { text: c.maxUses ? `${c.used} of ${c.maxUses}` : String(c.used) }), h("td", { text: naira(c.given) }), h("td", {}, h("span", { class: "pill " + (state === "Live" ? "ok" : ""), text: state })),
+      h("td", {}, h("button", { class: "btn sm", onclick: () => codeEditor(c, () => discounts(root)), text: "Edit" })));
+  }), "No discount codes yet. Create one to run a promotion.");
+  root.replaceChildren(h("div", { class: "toolbar" }, h("span", { class: "grow" }), h("button", { class: "btn primary", onclick: () => codeEditor(null, () => discounts(root)), text: "+ New code" })), list);
+}
+function codeEditor(c, done) {
+  const f = { code: c?.code || "", kind: c?.kind || "percent", value: c?.value ?? "", minOrder: c?.minOrder ?? "", maxDiscount: c?.maxDiscount ?? "", maxUses: c?.maxUses ?? "", perCustomerOnce: c ? c.perCustomerOnce : true, active: c ? c.active : true, note: c?.note || "", startsAt: (c?.startsAt || "").slice(0, 10), endsAt: (c?.endsAt || "").slice(0, 10) };
+  const num = (v) => (v === "" || v == null ? null : Number(v));
+  const msg = h("p", { class: "msg", role: "alert" });
+  const inp = (label, key, extra = {}) => h("div", {}, h("label", { text: label }), h("input", { value: f[key], oninput: (e) => (f[key] = e.target.value), ...extra }));
+  const kind = h("select", { "aria-label": "Type of discount", onchange: (e) => (f.kind = e.target.value) }, h("option", { value: "percent", text: "Percentage off", selected: f.kind === "percent" }), h("option", { value: "fixed", text: "Fixed amount off (₦)", selected: f.kind === "fixed" }));
+  const form = h("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault(); msg.textContent = "";
+    const body = { code: f.code, kind: f.kind, value: num(f.value), minOrder: num(f.minOrder), maxDiscount: num(f.maxDiscount), maxUses: num(f.maxUses), perCustomerOnce: f.perCustomerOnce, active: f.active, note: f.note, startsAt: f.startsAt ? `${f.startsAt}T00:00:00Z` : null, endsAt: f.endsAt ? `${f.endsAt}T23:59:59Z` : null };
+    try { await api("/discounts", { method: "POST", body }); toast(c ? "Code saved" : "Code created"); close(); done(); } catch (err) { msg.textContent = err.message; }
+  } },
+    c ? h("p", {}, h("strong", { text: c.code })) : inp("Code (letters and numbers, e.g. WELCOME10)", "code", { required: true, maxlength: "24" }),
+    h("div", { class: "row2" }, h("div", {}, h("label", { text: "Type" }), kind), inp("Amount (% or ₦)", "value", { type: "number", min: "1", required: true })),
+    h("div", { class: "row2" }, inp("Minimum order ₦ (optional)", "minOrder", { type: "number", min: "1" }), inp("Most it can take off ₦ (optional)", "maxDiscount", { type: "number", min: "1" })),
+    h("div", { class: "row2" }, inp("Total uses allowed (optional)", "maxUses", { type: "number", min: "1" }), inp("Note for yourself (optional)", "note", { maxlength: "120" })),
+    h("div", { class: "row2" }, inp("Starts (optional)", "startsAt", { type: "date" }), inp("Ends (optional)", "endsAt", { type: "date" })),
+    h("div", { class: "checks" },
+      h("label", {}, h("input", { type: "checkbox", checked: f.perCustomerOnce, onchange: (e) => (f.perCustomerOnce = e.target.checked) }), "Each customer can use it once"),
+      h("label", {}, h("input", { type: "checkbox", checked: f.active, onchange: (e) => (f.active = e.target.checked) }), "Live (untick to pause)")),
+    h("p", { class: "muted", text: "The code only takes money off the groceries, never the delivery fee. Cancelling an order gives its use back." }),
+    msg, h("div", { style: "display:flex;gap:8px" }, h("button", { class: "btn primary", type: "submit", text: "Save" }), h("button", { class: "btn", type: "button", onclick: () => close(), text: "Cancel" })));
+  const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": c ? "Edit discount code" : "New discount code" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: c ? "Edit discount code" : "New discount code" }), h("button", { class: "x", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(modal);
 }
 
 // ---------- customers ----------
