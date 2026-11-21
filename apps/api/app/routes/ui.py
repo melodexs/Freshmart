@@ -50,6 +50,14 @@ async def home(request: Request):
     )
 
 
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    """The admin shell. It holds no data: every figure comes from the guarded /api/store/admin API."""
+    resp = _render(request, "admin.html")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @router.get("/ui/products", response_class=HTMLResponse)
 async def product_grid(request: Request, cat: str = "All", q: str = "", sort: str = "default"):
     q_norm = q.strip().lower()[:60]
