@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, orders, products, stock, discounts, customers, settings };
-const titles = { overview: "Overview", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, reports, orders, products, stock, discounts, customers, settings };
+const titles = { overview: "Overview", reports: "Sales reports", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -97,6 +97,67 @@ async function overview(root) {
     h("div", { class: "panel" }, h("h2", { text: "Recent orders" }),
       table(["Order", "Total", "Status", "When"], d.recent.map((o) => h("tr", {}, h("td", { text: o.id }), h("td", { text: naira(o.total) }), h("td", {}, pill(o.status)), h("td", { text: when(o.date) }))), "No orders yet."))
   );
+}
+
+
+// ---------- sales reports ----------
+const SVG = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, ...kids) {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return e;
+}
+function revenueChart(series) {
+  const W = 720, H = 240, L = 54, R = 12, T = 14, B = 30, iw = W - L - R, ih = H - T - B;
+  const max = Math.max(1, ...series.map((x) => x.revenue));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const x = (i) => L + (series.length === 1 ? iw / 2 : (i * iw) / (series.length - 1));
+  const y = (v) => T + ih - (v / top) * ih;
+  const pts = series.map((d, i) => `${x(i).toFixed(1)},${y(d.revenue).toFixed(1)}`);
+  const el = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "linechart", role: "img", "aria-label": `Revenue per day from ${series[0].date} to ${series[series.length - 1].date}` });
+  for (let k = 0; k <= 4; k++) {
+    const v = (top / 4) * k, yy = y(v);
+    el.append(svg("line", { x1: L, x2: W - R, y1: yy, y2: yy, class: "grid" }), svg("text", { x: L - 8, y: yy + 4, class: "axis", "text-anchor": "end" }, v >= 1000 ? "₦" + Math.round(v / 1000) + "k" : "₦" + Math.round(v)));
+  }
+  const every = Math.max(1, Math.ceil(series.length / 8));
+  series.forEach((d, i) => { if (i % every === 0 || i === series.length - 1) el.append(svg("text", { x: x(i), y: H - 8, class: "axis", "text-anchor": "middle" }, d.date.slice(5))); });
+  el.append(svg("polygon", { points: `${L},${T + ih} ${pts.join(" ")} ${x(series.length - 1).toFixed(1)},${T + ih}`, class: "area" }), svg("polyline", { points: pts.join(" "), class: "line" }));
+  series.forEach((d, i) => el.append(svg("circle", { cx: x(i), cy: y(d.revenue), r: series.length > 40 ? 2 : 3.5, class: "dot" }, svg("title", {}, `${d.date}: ${naira(d.revenue)} from ${d.orders} order${d.orders === 1 ? "" : "s"}`))));
+  return el;
+}
+function ranked(title, rows, label, cols) {
+  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  return h("div", { class: "panel" }, h("h2", { text: title }), rows.length
+    ? h("div", { class: "rank" }, rows.map((r) => h("div", { class: "rank-row" },
+        h("div", { class: "rank-top" }, h("strong", { text: r[label] }), h("span", { text: naira(r.revenue) })),
+        h("div", { class: "rank-bar" }, h("i", { style: `width:${Math.max(3, Math.round((r.revenue / max) * 100))}%` })),
+        h("small", { class: "muted", text: cols(r) }))))
+    : h("p", { class: "muted", text: "Nothing sold in this period yet." }));
+}
+async function reports(root) {
+  let days = 30;
+  const body = h("div");
+  const load = async () => {
+    body.replaceChildren(h("div", { class: "loading", text: "Loading…" }));
+    const d = await api(`/reports?days=${days}`);
+    const card = (k, v, sub) => h("div", { class: "card" }, h("div", { class: "k", text: k }), h("div", { class: "v", text: v }), sub ? h("small", { class: "muted", text: sub }) : null);
+    body.replaceChildren(
+      h("div", { class: "cards" },
+        card("Revenue", naira(d.revenue), `${d.from} to ${d.to}`), card("Orders", d.orders, d.cancelled ? `${d.cancelled} cancelled` : "none cancelled"),
+        card("Average order", naira(d.averageOrder)), card("Items sold", d.itemsSold), card("Delivery fees", naira(d.deliveryFees)), card("Discounts given", naira(d.discountsGiven))),
+      h("div", { class: "panel" }, h("h2", { text: `Revenue per day, last ${d.days} days` }), d.orders ? revenueChart(d.series) : h("div", { class: "empty", text: "No paid or confirmed orders in this period yet. Cancelled orders and unpaid pay-ahead orders are not counted as sales." })),
+      h("div", { class: "two" },
+        ranked("Top products", d.topProducts, "name", (r) => `${r.units} unit${r.units === 1 ? "" : "s"} in ${r.orders} order${r.orders === 1 ? "" : "s"}`),
+        h("div", {}, ranked("By payment method", d.byPayment, "label", (r) => `${r.orders} order${r.orders === 1 ? "" : "s"}`), ranked("By delivery area", d.byArea, "label", (r) => `${r.orders} order${r.orders === 1 ? "" : "s"}`))));
+  };
+  const range = h("select", { "aria-label": "Report period", onchange: (e) => { days = Number(e.target.value); load().catch((err) => toast(err.message, true)); } },
+    [[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 90 days"]].map(([v, t]) => h("option", { value: v, text: t, selected: v === days })));
+  const exportBtn = h("a", { class: "btn", href: "/api/store/admin/orders.csv", download: "", text: "Export all orders (CSV)" });
+  const exportRange = h("a", { class: "btn", href: "#", text: "Export this period (CSV)", onclick: (e) => { e.preventDefault(); location.href = `/api/store/admin/orders.csv?days=${days}`; } });
+  root.replaceChildren(h("div", { class: "toolbar" }, range, h("span", { class: "grow" }), exportRange, exportBtn), body);
+  await load();
 }
 
 // ---------- orders ----------

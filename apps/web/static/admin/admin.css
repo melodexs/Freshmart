@@ -78,3 +78,18 @@ tr:last-child td{border-bottom:0}
 .photo-preview{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #e0dac8;background:#f6f2e6}
 .photo-preview[hidden]{display:none}
 .neg{color:#9b2c2c}.pos{color:#1f5a3d}
+
+/* ---- sales reports ---- */
+.linechart{width:100%;height:auto;display:block;overflow:visible}
+.linechart .grid{stroke:#e8e2d0;stroke-width:1}
+.linechart .axis{fill:var(--mut);font-size:11px}
+.linechart .area{fill:var(--g7);opacity:.12}
+.linechart .line{fill:none;stroke:var(--g7);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.linechart .dot{fill:#fff;stroke:var(--g7);stroke-width:2}
+.linechart .dot:hover{fill:var(--g7)}
+.rank{display:grid;gap:14px}
+.rank-top{display:flex;justify-content:space-between;gap:10px;font-size:.92rem}
+.rank-bar{height:7px;background:#efe9d8;border-radius:99px;margin:6px 0 4px;overflow:hidden}
+.rank-bar i{display:block;height:100%;background:var(--g7);border-radius:99px}
+.card small{display:block;margin-top:4px}
+.btn[download]{text-decoration:none;display:inline-flex;align-items:center}
