@@ -256,3 +256,13 @@ def test_admin_list_shows_usage_and_money_given(shop):
 )
 def test_bad_admin_codes_are_refused(shop, body):
     assert shop.post("/api/store/admin/discounts", json=body, headers=STAFF).status_code == 400
+
+
+def test_customer_sees_why_their_total_is_lower(shop):
+    make_code(shop)
+    o = order(shop, "SAVE10").json()["order"]
+    assert "saved you ₦380" in shop.get("/ui/orders").text
+    assert shop.get("/api/orders/mine").json()["orders"][0]["discount"] == 380
+    shop.post("/api/auth/logout")
+    t = shop.post("/ui/track", data={"order_id": o["id"], "phone": "08011111111"}).text
+    assert "Code SAVE10 saved you ₦380" in t

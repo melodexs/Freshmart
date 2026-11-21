@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, orders, products, discounts, customers, settings };
-const titles = { overview: "Overview", orders: "Orders", products: "Products", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, orders, products, stock, discounts, customers, settings };
+const titles = { overview: "Overview", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -240,6 +240,25 @@ function editor(p, done) {
   function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); }
   document.addEventListener("keydown", onKey); document.body.append(dl, modal);
   (isNew ? form.querySelector("input") : form.querySelector("input")).focus();
+}
+
+// ---------- stock history ----------
+async function stock(root) {
+  const prods = (await api("/products")).products.filter((p) => p.stock !== null);
+  const sel = h("select", { "aria-label": "Product" }, h("option", { value: "", text: "All products" }), ...prods.map((p) => h("option", { value: p.id, text: `${p.name} (${p.stock} left)` })));
+  const box = h("div");
+  async function load() {
+    const d = await api("/stock-history?limit=200" + (sel.value ? `&product=${encodeURIComponent(sel.value)}` : ""));
+    box.replaceChildren(table(["When", "Product", "Change", "Left after", "Why"], d.moves.map((m) => h("tr", {},
+      h("td", { text: when(m.at) }), h("td", { text: m.name }),
+      h("td", {}, h("strong", { class: m.change < 0 ? "neg" : "pos", text: (m.change > 0 ? "+" : "") + m.change })),
+      h("td", { text: m.after ?? "" }),
+      h("td", {}, m.reason, m.orderId ? h("div", { class: "muted", text: `Order ${m.orderId}` }) : null, h("div", { class: "muted", text: m.actor === "admin" ? "by the store" : "by a customer" })))),
+      "No stock changes recorded yet. Every sale, cancellation and correction will appear here."));
+  }
+  sel.onchange = load;
+  root.replaceChildren(h("div", { class: "toolbar" }, sel, h("span", { class: "grow" }), h("span", { class: "muted", text: "Latest 200 changes" })), box);
+  await load();
 }
 
 // ---------- discount codes ----------

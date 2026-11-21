@@ -159,6 +159,10 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         if discount:
             await db.release_discount(order["id"])
         raise
+    for pid, q in reserved:
+        product = await db.get_product(pid)
+        if product and product.get("stock") is not None:
+            await catalogue.log_stock(pid, -q, product["stock"], "Sold", "customer", order["id"])
 
     return {"order": order}
 

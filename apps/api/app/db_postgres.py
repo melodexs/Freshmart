@@ -62,6 +62,11 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE IF NOT EXISTS stock_moves (
+              id BIGSERIAL PRIMARY KEY, product_id TEXT NOT NULL, change INTEGER NOT NULL,
+              after INTEGER, reason TEXT NOT NULL, order_id TEXT, actor TEXT NOT NULL,
+              at TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE INDEX IF NOT EXISTS stock_moves_product_idx ON stock_moves (product_id, at DESC);
             CREATE TABLE IF NOT EXISTS discount_codes (
               code TEXT PRIMARY KEY, rule JSONB NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
             CREATE TABLE IF NOT EXISTS discount_uses (
@@ -148,6 +153,7 @@ def _order(r) -> dict:
         "date": _iso(r["date"]),
         "items": json.loads(items) if isinstance(items, str) else items,
         "subtotal": r["subtotal"],
+        "discount": _pd(detail).get("discountAmount", 0),
         "deliveryFee": r["delivery_fee"],
         "total": r["total"],
         "address": r["address"],
@@ -576,3 +582,39 @@ async def release_discount(order_id: str) -> None:
     """A cancelled order gives its use back."""
     async with _pool.acquire() as c:
         await c.execute("DELETE FROM discount_uses WHERE order_id=$1", order_id)
+
+
+async def add_stock_move(m: dict) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            "INSERT INTO stock_moves (product_id, change, after, reason, order_id, actor) VALUES ($1,$2,$3,$4,$5,$6)",
+            m["productId"],
+            m["change"],
+            m.get("after"),
+            m["reason"],
+            m.get("orderId"),
+            m["actor"],
+        )
+
+
+async def list_stock_moves(product_id: str | None, limit: int) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            """SELECT m.*, p.name FROM stock_moves m LEFT JOIN products p ON p.id = m.product_id
+               WHERE ($1::text IS NULL OR m.product_id = $1) ORDER BY m.at DESC, m.id DESC LIMIT $2""",
+            product_id,
+            limit,
+        )
+    return [
+        {
+            "productId": r["product_id"],
+            "name": r["name"] or r["product_id"],
+            "change": r["change"],
+            "after": r["after"],
+            "reason": r["reason"],
+            "orderId": r["order_id"],
+            "actor": r["actor"],
+            "at": _iso(r["at"]),
+        }
+        for r in rows
+    ]
