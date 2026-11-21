@@ -53,7 +53,32 @@ async def delivery_fee() -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else DEFAULT_DELIVERY_FEE
 
 
-async def restock_order(order: dict) -> None:
+async def log_stock(
+    product_id: str, change: int, after, reason: str, actor: str, order_id: str | None = None
+) -> None:
+    """Record why stock changed. A logging problem must never stop a sale or a cancellation."""
+    if change == 0:
+        return
+    try:
+        await db.add_stock_move(
+            {
+                "productId": product_id,
+                "change": change,
+                "after": after,
+                "reason": reason,
+                "orderId": order_id,
+                "actor": actor,
+            }
+        )
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger("ogs").exception("could not record a stock movement")
+
+
+async def restock_order(
+    order: dict, reason: str = "Order cancelled", actor: str = "customer"
+) -> None:
     """Put an order's items back on the shelf and give back its discount use.
 
     Every way an order can be cancelled goes through here.
@@ -61,7 +86,9 @@ async def restock_order(order: dict) -> None:
     for line in order.get("items", []):
         pid, qty = line.get("productId"), line.get("qty")
         if isinstance(pid, str) and isinstance(qty, int) and qty > 0:
-            await db.adjust_stock(pid, qty)
+            after = await db.adjust_stock(pid, qty)
+            if after is not None:
+                await log_stock(pid, qty, after, reason, actor, order.get("id"))
     if order.get("id"):
         await db.release_discount(order["id"])
 

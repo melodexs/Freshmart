@@ -8,6 +8,7 @@
       <span>{{ o.id }}</span><span>{{ o.total|naira }}</span>
     </div>
     <div style="opacity:.7;font-size:.8rem;">{{ o.date|local_time }}</div>
+    {% if o.paymentDetail and o.paymentDetail.discountAmount %}<div style="font-size:.82rem;color:#1f5a3d;">Code {{ o.paymentDetail.discountCode }} saved you {{ o.paymentDetail.discountAmount|naira }}</div>{% endif %}
     <div style="margin-top:4px;">
       {%- for i in o["items"] -%}
         {{ i.qty }}× {{ i.name }}{% if i.note %} — "{{ i.note }}"{% endif %}{% if not loop.last %}, {% endif %}

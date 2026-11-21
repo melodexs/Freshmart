@@ -24,6 +24,7 @@ EMPTY = {
     "favourites": {},
     "addresses": {},
     "images": {},
+    "stockMoves": [],
     "discounts": {},
     "discountUses": [],
 }
@@ -414,3 +415,20 @@ async def release_discount(order_id: str) -> None:
         d = _read()
         d["discountUses"] = [u for u in d["discountUses"] if u["orderId"] != order_id]
         _write(d)
+
+
+async def add_stock_move(m: dict) -> None:
+    from datetime import UTC, datetime
+
+    with _lock:
+        d = _read()
+        d["stockMoves"].insert(0, {**m, "at": datetime.now(UTC).isoformat().replace("+00:00", "Z")})
+        _write(d)
+
+
+async def list_stock_moves(product_id: str | None, limit: int) -> list[dict]:
+    with _lock:
+        d = _read()
+    names = {k: v.get("name", k) for k, v in d["products"].items()}
+    rows = [m for m in d["stockMoves"] if product_id is None or m["productId"] == product_id]
+    return [{**m, "name": names.get(m["productId"], m["productId"])} for m in rows[:limit]]

@@ -122,6 +122,8 @@ async def create_product(request: Request):
     if await db.get_product(p["id"]):
         return err(409, "A product with that code already exists.")
     await db.save_product(p)
+    if p["stock"]:
+        await catalogue.log_stock(p["id"], p["stock"], p["stock"], "New product added", "admin")
     return {"product": p}
 
 
@@ -134,6 +136,11 @@ async def update_product(product_id: str, request: Request):
     if problem:
         return err(400, problem)
     await db.save_product(p)
+    if p["stock"] != existing.get("stock") and p["stock"] is not None:
+        was = existing.get("stock")
+        change = p["stock"] if was is None else p["stock"] - was
+        reason = "Stock tracking started" if was is None else "Stock edited by admin"
+        await catalogue.log_stock(product_id, change, p["stock"], reason, "admin")
     return {"product": p}
 
 
@@ -161,9 +168,19 @@ async def set_stock(product_id: str, request: Request):
     n = clean_int(b.get("stock"), 0, 1_000_000)
     if n is None:
         return err(400, "Stock must be a whole number from 0 up.")
+    before = p.get("stock")
     p["stock"] = n
     await db.save_product(p)
+    if before is None:
+        await catalogue.log_stock(product_id, n, n, "Stock tracking started", "admin")
+    else:
+        await catalogue.log_stock(product_id, n - before, n, "Stock corrected by admin", "admin")
     return {"product": p}
+
+
+@router.get("/stock-history")
+async def stock_history(product: str | None = None, limit: int = 100):
+    return {"moves": await db.list_stock_moves(product, max(1, min(limit, 500)))}
 
 
 @router.get("/settings")
@@ -328,7 +345,9 @@ async def set_order_status(order_id: str, request: Request):
         return err(409, "That order was just changed by someone else. Please refresh.")
     await db.add_audit("admin", "status_changed", order_id, {"from": o["status"], "to": new})
     if new == order_status.CANCELLED:
-        await catalogue.restock_order(o)  # cancelling gives the reserved stock back
+        await catalogue.restock_order(
+            o, "Order cancelled by admin", "admin"
+        )  # gives the reserved stock back
     return {"order": await db.get_order(order_id)}
 
 
