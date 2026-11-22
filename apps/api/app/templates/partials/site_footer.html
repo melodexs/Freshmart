@@ -17,6 +17,14 @@
         <span>Otukpo, Benue State, Nigeria</span>
       </div>
     </div>
+    <form class="news" id="newsForm" novalidate aria-labelledby="newsTitle">
+      <div><h3 id="newsTitle">Get offers in your inbox</h3><p>Join our list for special offers and new arrivals. Leave any time.</p></div>
+      <div class="news-row"><label class="sr" for="newsEmail">Email address</label>
+        <input id="newsEmail" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" maxlength="254" required>
+        <button type="submit" class="btn-primary">Subscribe</button></div>
+      <p class="news-msg" id="newsMsg" role="status" aria-live="polite"></p>
+    </form>
+    {% if social_links %}<div class="social" aria-label="Follow us">{% for s in social_links %}<a href="{{ s.url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ s.label }}">{{ s.label }}</a>{% endfor %}</div>{% endif %}
     <div class="foot-base">&copy; Okwui&#39;s Grocery Store (OGS). All prices are in Nigerian naira.</div>
   </div>
 </footer>

@@ -14,6 +14,7 @@ from . import catalogue, config, db
 from .routes import account as account_routes
 from .routes import admin as admin_routes
 from .routes import auth as auth_routes
+from .routes import newsletter as newsletter_routes
 from .routes import orders as order_routes
 from .routes import products as product_routes
 from .routes import reports as report_routes
@@ -132,6 +133,8 @@ app.include_router(store_routes.router, prefix="/api/store")
 app.include_router(admin_routes.router, prefix="/api/store/admin")
 app.include_router(report_routes.router, prefix="/api/store/admin")
 app.include_router(review_routes.router)
+app.include_router(newsletter_routes.router)
+app.include_router(newsletter_routes.staff_router, prefix="/api/store/admin")
 app.include_router(review_routes.staff_router, prefix="/api/store/admin")
 app.include_router(account_routes.router, prefix="/api/account")
 app.include_router(ui_routes.router)

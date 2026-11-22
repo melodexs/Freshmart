@@ -13,7 +13,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .. import auth, catalogue, config, db, order_status, ratelimit
+from .. import auth, catalogue, config, db, order_status, ratelimit, social
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
 from .reviews import bought_and_received, public, summarise
@@ -123,6 +123,7 @@ async def home(request: Request):
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
         contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
             await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
             "Hello! I have a question about my order.",
@@ -211,7 +212,17 @@ async def media(image_id: str):
 async def account_page(request: Request):
     if not auth.current_user(request):
         return RedirectResponse("/?signin=1", status_code=303)
-    return _render(request, "account.html", areas=await catalogue.delivery_areas())
+    return _render(
+        request,
+        "account.html",
+        areas=await catalogue.delivery_areas(),
+        contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
+        whatsapp=whatsapp_link(
+            await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
+            "Hello! I have a question about my order.",
+        ),
+    )
 
 
 @router.get("/product/{product_id}", response_class=HTMLResponse)
@@ -245,6 +256,7 @@ async def product_page(request: Request, product_id: str):
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
         contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
             config.WHATSAPP_NUMBER, f"Hello! I have a question about {p['name']}."
         ),

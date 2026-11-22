@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, reports, reviews, orders, products, stock, discounts, customers, settings };
-const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, reports, reviews, newsletter, orders, products, stock, discounts, customers, settings };
+const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", newsletter: "Newsletter", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -175,6 +175,18 @@ async function reviews(root) {
   root.replaceChildren(
     h("p", { class: "muted", text: "Only customers who received a product can review it, so these are all verified purchases. You can hide a review that breaks your rules; it is kept on record and you can show it again. Reviews cannot be edited by staff." }),
     list.length ? h("div", {}, list) : h("div", { class: "empty", text: "No reviews yet. They appear here when a customer who received a product writes one." }));
+}
+
+// ---------- newsletter ----------
+async function newsletter(root) {
+  const d = await api("/subscribers");
+  const rows = d.subscribers.map((r) => h("tr", {}, h("td", { text: r.email }), h("td", { text: when(r.subscribed) })));
+  root.replaceChildren(
+    h("div", { class: "toolbar" }, h("strong", { text: `${d.count} subscriber${d.count === 1 ? "" : "s"}` }), h("span", { class: "grow" }),
+      h("a", { class: "btn", href: "/api/store/admin/subscribers.csv", download: "", text: "Export (CSV)" })),
+    h("div", { class: "panel" }, h("p", { class: "muted", text: "These are people who asked, on the shop footer, to hear about offers. Nothing is sent from this site yet: sending a newsletter needs an email service to be connected. Each person can unsubscribe with their own link." })),
+    d.count ? h("div", { class: "panel tablewrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Email" }), h("th", { text: "Subscribed" }))), h("tbody", {}, rows)))
+            : h("div", { class: "panel empty", text: "No subscribers yet. The signup box is in the shop footer." }));
 }
 
 // ---------- orders ----------
@@ -410,6 +422,7 @@ async function settings(root) {
   const form = h("form", { class: "form panel", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
     const body = { storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value,
+      social: Object.fromEntries(Object.keys(s.socialNetworks).map((k) => [k, $("#soc_" + k).value])),
       areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee), eta: a.eta })),
       bank: { bank: $("#sBank").value, accountName: $("#sAcctName").value, accountNumber: $("#sAcctNo").value } };
     try { await api("/settings", { method: "PUT", body }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
@@ -423,6 +436,9 @@ async function settings(root) {
     h("h2", { style: "margin-top:18px", text: "Store details" }),
     inp("sName", "Store name", s.storeName, { maxlength: "80" }), inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
     inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }), inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),
+    h("h2", { style: "margin-top:18px", text: "Social media links" }),
+    h("p", { class: "muted", text: "Shown in the shop footer only when filled in. Paste the full address of your page. Leave blank to hide." }),
+    ...Object.entries(s.socialNetworks).map(([k, label]) => inp("soc_" + k, label, (s.social || {})[k] || "", { placeholder: "https://", maxlength: "200" })),
     msg, h("button", { class: "btn primary", type: "submit", text: "Save settings" }),
     h("p", { class: "muted", text: "Online payment (Paystack) and SMS or WhatsApp notifications stay off until you supply real accounts and keys." }));
   root.replaceChildren(form);

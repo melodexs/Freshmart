@@ -103,14 +103,15 @@ def test_shelves_appear_once_there_is_real_data(client):
     assert "Best sellers" in h and "Special offers" in h and "New arrivals" in h
 
 
-def test_the_home_page_never_invents_reviews_or_a_dead_newsletter(client):
-    h = client.get("/").text.lower()
-    assert (
-        "testimonial" not in h
-        and "newsletter" not in h
-        and "5 stars" not in h
-        and "verified buyer" not in h
-    )
+def test_the_home_page_never_invents_reviews_and_the_newsletter_is_real(client):
+    h = client.get("/").text
+    low = h.lower()
+    # No invented social proof. (The testimonials section only exists once real reviews do.)
+    assert "testimonial" not in low and "5 stars" not in low and "verified buyer" not in low
+    # The newsletter box must be a working form: a real field, and a script that posts to a real route.
+    assert 'id="newsForm"' in h and 'name="email"' in h and "/static/js/newsletter.js" in h
+    assert "/api/newsletter" in client.get("/static/js/newsletter.js").text
+    assert client.post("/api/newsletter", json={"email": "check@example.com"}).status_code == 200
 
 
 def test_trust_faq_and_contact_sections_exist(client):

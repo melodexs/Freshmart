@@ -228,3 +228,15 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 .tm{margin:0;padding:18px;background:#fff;border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;gap:10px}
 .tm blockquote{margin:0;font-family:Fraunces,Georgia,serif;font-size:1.02rem;line-height:1.5;overflow-wrap:anywhere}
 .tm figcaption{margin-top:auto;font-size:.85rem;color:#5d6b63}
+
+/* ---------- footer: newsletter and social links ---------- */
+.news{display:grid;grid-template-columns:1fr minmax(260px,430px);gap:12px 28px;align-items:center;padding:22px 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.14)}
+.news h3{margin:0 0 4px}.news p{margin:0;opacity:.85;font-size:.9rem}
+.news-row{display:flex;gap:8px}
+.news-row input{flex:1;min-width:0;padding:12px 14px;border-radius:999px;border:0;font:inherit;background:#fff;color:#1b211c}
+.news-row .btn-primary{width:auto;margin:0;padding:12px 20px;border-radius:999px;white-space:nowrap}
+.news-msg{grid-column:1/-1;min-height:1.2em;font-size:.88rem}.news-msg.ok{color:#bff0cf}.news-msg.bad{color:#ffd0c4}
+.social{display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 14px}
+.social a{padding:7px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;font-size:.85rem;text-decoration:none}
+.social a:hover{background:rgba(255,255,255,.12)}
+@media (max-width:700px){.news{grid-template-columns:1fr}}
