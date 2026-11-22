@@ -117,6 +117,7 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         if why:
             return err(400, why)
     total = subtotal - discount + delivery_fee
+    eta = await catalogue.eta_for_area(area)
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     order = {
@@ -133,7 +134,11 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "customerName": customer_name,
         "instructions": instructions,
         "payMethod": pay_method,
-        "paymentDetail": {"discountCode": code, "discountAmount": discount} if discount else {},
+        "paymentDetail": {
+            **({"discountCode": code, "discountAmount": discount} if discount else {}),
+            # What the customer was told at checkout, kept as it was even if the store changes it later.
+            **({"eta": eta} if eta else {}),
+        },
         "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }

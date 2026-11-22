@@ -104,7 +104,11 @@ def test_bad_delivery_areas_are_rejected(shop, areas):
 def test_areas_are_public_so_checkout_can_list_them(shop):
     set_areas(shop, [{"name": "Otukpo", "fee": 800}, {"name": "Ugbokpo", "fee": 1500}])
     d = shop.get("/api/products").json()
-    assert d["areas"] == [{"name": "Otukpo", "fee": 800}, {"name": "Ugbokpo", "fee": 1500}]
+    # Exactly these fields and no others: name, fee and the optional delivery time ("" when unset).
+    assert d["areas"] == [
+        {"name": "Otukpo", "fee": 800, "eta": ""},
+        {"name": "Ugbokpo", "fee": 1500, "eta": ""},
+    ]
 
 
 def test_the_customers_name_and_instructions_are_saved(shop):

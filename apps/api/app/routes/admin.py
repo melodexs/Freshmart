@@ -225,7 +225,8 @@ async def put_settings(request: Request):
             if name.lower() in seen:
                 return err(400, f"The area '{name}' is listed twice.")
             seen.add(name.lower())
-            areas.append({"name": name, "fee": fee})
+            eta = clean_text(a.get("eta"), 40)
+            areas.append({"name": name, "fee": fee, "eta": eta})
         await db.set_setting("delivery_areas", areas)
         await db.add_audit("admin", "delivery_areas_changed", "settings", {"areas": areas})
     if "bank" in b:

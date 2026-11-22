@@ -123,10 +123,11 @@ async def delivery_areas() -> list[dict]:
                 continue
             name = str(a.get("name") or "").strip()
             fee = a.get("fee")
+            eta = " ".join(str(a.get("eta") or "").split())[:40]
             if name and isinstance(fee, int) and not isinstance(fee, bool) and fee >= 0:
-                areas.append({"name": name, "fee": fee})
+                areas.append({"name": name, "fee": fee, "eta": eta})
     if not areas:
-        areas = [{"name": DEFAULT_AREA, "fee": await delivery_fee()}]
+        areas = [{"name": DEFAULT_AREA, "fee": await delivery_fee(), "eta": ""}]
     return areas
 
 
@@ -138,6 +139,19 @@ async def fee_for_area(name) -> int | None:
         if a["name"].lower() == name.strip().lower():
             return a["fee"]
     return None
+
+
+async def eta_for_area(name) -> str:
+    """The delivery time the store promises for an area, or "" when none has been set.
+
+    Never guessed: an area without an estimate shows no estimate.
+    """
+    if not isinstance(name, str):
+        return ""
+    for a in await delivery_areas():
+        if a["name"].lower() == name.strip().lower():
+            return a.get("eta", "")
+    return ""
 
 
 def from_price(p: dict) -> int:
