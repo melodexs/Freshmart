@@ -24,6 +24,7 @@ EMPTY = {
     "favourites": {},
     "reviews": [],
     "subscribers": [],
+    "reset_tokens": [],
     "addresses": {},
     "images": {},
     "stockMoves": [],
@@ -516,3 +517,34 @@ async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
         rows = list(_read()["subscribers"])
     rows = [r for r in rows if include_unsubscribed or not r.get("unsubscribed")]
     return sorted(rows, key=lambda r: r["subscribed"], reverse=True)
+
+
+# ---- password reset tokens: only the hash of a token is kept, never the token itself ----
+async def add_reset_token(token_hash: str, email: str, expires: float) -> None:
+    with _lock:
+        data = _read()
+        # Drop expired rows and any older tokens for this email, so only the newest link works.
+        import time as _t
+
+        data["reset_tokens"] = [
+            t for t in data["reset_tokens"] if t["expires"] > _t.time() and t["email"] != email
+        ]
+        data["reset_tokens"].append({"hash": token_hash, "email": email, "expires": expires})
+        _write(data)
+
+
+async def use_reset_token(token_hash: str, now: float) -> str | None:
+    """Consume a token: returns its email once, and never again. Expired or unknown gives None."""
+    with _lock:
+        data = _read()
+        found = next((t for t in data["reset_tokens"] if t["hash"] == token_hash), None)
+        if not found:
+            return None
+        data["reset_tokens"].remove(found)
+        _write(data)
+        return found["email"] if found["expires"] > now else None
+
+
+async def peek_reset_token(token_hash: str, now: float) -> bool:
+    with _lock:
+        return any(t["hash"] == token_hash and t["expires"] > now for t in _read()["reset_tokens"])

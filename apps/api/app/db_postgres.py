@@ -90,6 +90,9 @@ async def init() -> None:
               created TIMESTAMPTZ NOT NULL DEFAULT now(), updated TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (email, product_id));
             CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
+            CREATE TABLE IF NOT EXISTS reset_tokens (
+              hash TEXT PRIMARY KEY, email TEXT NOT NULL, expires DOUBLE PRECISION NOT NULL);
+            CREATE INDEX IF NOT EXISTS reset_tokens_email_idx ON reset_tokens (email);
             CREATE TABLE IF NOT EXISTS subscribers (
               email TEXT PRIMARY KEY, subscribed TIMESTAMPTZ NOT NULL DEFAULT now(),
               unsubscribed BOOLEAN NOT NULL DEFAULT FALSE);
@@ -718,3 +721,37 @@ async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
         {"email": r["email"], "subscribed": r["subscribed"].isoformat().replace("+00:00", "Z"), "unsubscribed": r["unsubscribed"]}
         for r in rows
     ]  # fmt: skip
+
+
+# ---- password reset tokens (hash only) ----
+async def add_reset_token(token_hash: str, email: str, expires: float) -> None:
+    import time as _t
+
+    async with _pool.acquire() as c, c.transaction():
+        await c.execute(
+            "DELETE FROM reset_tokens WHERE expires < $1 OR email = $2", _t.time(), email
+        )
+        await c.execute(
+            "INSERT INTO reset_tokens (hash, email, expires) VALUES ($1,$2,$3)",
+            token_hash,
+            email,
+            expires,
+        )
+
+
+async def use_reset_token(token_hash: str, now: float) -> str | None:
+    """Atomic: the row is deleted in the same statement that reads it, so a token can never be used twice."""
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "DELETE FROM reset_tokens WHERE hash = $1 RETURNING email, expires", token_hash
+        )
+    return row["email"] if row and row["expires"] > now else None
+
+
+async def peek_reset_token(token_hash: str, now: float) -> bool:
+    async with _pool.acquire() as c:
+        return bool(
+            await c.fetchval(
+                "SELECT 1 FROM reset_tokens WHERE hash = $1 AND expires > $2", token_hash, now
+            )
+        )

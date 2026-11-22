@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import catalogue, config, db
+from . import auth, catalogue, config, db
 from .routes import account as account_routes
 from .routes import admin as admin_routes
 from .routes import auth as auth_routes
@@ -18,6 +18,7 @@ from .routes import newsletter as newsletter_routes
 from .routes import orders as order_routes
 from .routes import products as product_routes
 from .routes import reports as report_routes
+from .routes import reset as reset_routes
 from .routes import reviews as review_routes
 from .routes import store as store_routes
 from .routes import ui as ui_routes
@@ -27,6 +28,12 @@ from .templating import templates
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
+    # Remember which customers have reset their password, so old sessions stay dead after a restart.
+    stored = await db.get_setting("session_cutoffs", {})
+    if isinstance(stored, dict):
+        for email, when in stored.items():
+            if isinstance(when, int):
+                auth.revoke_sessions_before(email, when)
     seeded = await catalogue.seed_if_empty()
     if seeded:
         print(f"Catalogue was empty: loaded {seeded} starter products")
@@ -134,6 +141,7 @@ app.include_router(admin_routes.router, prefix="/api/store/admin")
 app.include_router(report_routes.router, prefix="/api/store/admin")
 app.include_router(review_routes.router)
 app.include_router(newsletter_routes.router)
+app.include_router(reset_routes.router)
 app.include_router(newsletter_routes.staff_router, prefix="/api/store/admin")
 app.include_router(review_routes.staff_router, prefix="/api/store/admin")
 app.include_router(account_routes.router, prefix="/api/account")
