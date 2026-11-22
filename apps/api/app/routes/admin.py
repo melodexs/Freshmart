@@ -97,6 +97,8 @@ def parse_product(b: dict, existing: dict | None) -> tuple[dict | None, str | No
         "id": pid,
         "name": name,
         "cat": cat,
+        "sub": clean_text(b.get("sub"), 40),
+        "brand": clean_text(b.get("brand"), 40),
         "emoji": clean_text(b.get("emoji"), 8),
         "description": clean_text(b.get("description"), 600),
         "image": image,

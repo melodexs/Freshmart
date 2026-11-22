@@ -168,6 +168,8 @@ async def save_product(p: dict) -> None:
             "id": p["id"],
             "name": p["name"],
             "cat": p["cat"],
+            "sub": p.get("sub", ""),
+            "brand": p.get("brand", ""),
             "emoji": p.get("emoji", ""),
             "description": p.get("description", ""),
             "image": p.get("image", ""),

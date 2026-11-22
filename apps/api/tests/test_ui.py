@@ -65,7 +65,8 @@ def test_product_grid_search_and_category(client):
 
 
 def test_product_grid_no_match(client):
-    assert "No products match" in client.get("/ui/products", params={"q": "zzzz"}).text
+    h = client.get("/ui/products", params={"q": "zzzz"}).text
+    assert "We could not find a match" in h and "Show all products" in h
 
 
 def test_product_search_is_escaped(client):

@@ -62,6 +62,9 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            -- Optional, additive: existing products keep working with empty values.
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory TEXT NOT NULL DEFAULT '';
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT NOT NULL DEFAULT '';
             CREATE TABLE IF NOT EXISTS stock_moves (
               id BIGSERIAL PRIMARY KEY, product_id TEXT NOT NULL, change INTEGER NOT NULL,
               after INTEGER, reason TEXT NOT NULL, order_id TEXT, actor TEXT NOT NULL,
@@ -275,6 +278,8 @@ def _product(r) -> dict:
         "id": r["id"],
         "name": r["name"],
         "cat": r["category"],
+        "sub": r["subcategory"],
+        "brand": r["brand"],
         "emoji": r["emoji"],
         "description": r["description"],
         "image": r["image"],
@@ -307,11 +312,11 @@ async def save_product(p: dict) -> None:
     async with _pool.acquire() as c:
         await c.execute(
             """INSERT INTO products (id,name,category,emoji,description,image,options,
-                 compare_prices,stock,active,featured,sort,updated)
-               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now())
+                 compare_prices,stock,active,featured,sort,subcategory,brand,updated)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14,now())
                ON CONFLICT (id) DO UPDATE SET name=$2, category=$3, emoji=$4, description=$5,
                  image=$6, options=$7::jsonb, compare_prices=$8::jsonb, stock=$9, active=$10,
-                 featured=$11, sort=$12, updated=now()""",
+                 featured=$11, sort=$12, subcategory=$13, brand=$14, updated=now()""",
             p["id"],
             p["name"],
             p["cat"],
@@ -324,6 +329,8 @@ async def save_product(p: dict) -> None:
             bool(p.get("active", True)),
             bool(p.get("featured", False)),
             int(p.get("sort", 0)),
+            p.get("sub", ""),
+            p.get("brand", ""),
         )
 
 

@@ -177,9 +177,36 @@ def in_stock(p: dict) -> bool:
     return p.get("stock") is None or p["stock"] > 0
 
 
+def matches_search(p: dict, words: list[str]) -> bool:
+    """Every word typed must appear in the name, category, subcategory or brand.
+
+    So "ariel soap" finds Ariel soap and not every soap, and "foodstuff rice" narrows within a category.
+    """
+    hay = " ".join((p["name"], p["cat"], p.get("sub", ""), p.get("brand", ""))).lower()
+    return all(w in hay for w in words)
+
+
+def subcategories(products: list[dict]) -> dict[str, list[str]]:
+    """{category: [subcategories that real products use]}. Empty until the admin fills any in."""
+    out: dict[str, list[str]] = {}
+    for p in products:
+        sub = p.get("sub", "")
+        if sub:
+            subs = out.setdefault(p["cat"], [])
+            if sub not in subs:
+                subs.append(sub)
+    return {c: sorted(v, key=str.lower) for c, v in out.items()}
+
+
+def brands(products: list[dict]) -> list[str]:
+    return sorted({p["brand"] for p in products if p.get("brand")}, key=str.lower)
+
+
 async def shelf(
     *,
     cat: str = "All",
+    sub: str = "",
+    brand: str = "",
     q: str = "",
     sort: str = "default",
     section: str = "",
@@ -193,12 +220,16 @@ async def shelf(
     section: "best" (most ordered), "new" (newest first), "offers" (discounted), "featured".
     Price filters compare against the 'from' price. Sold-out products sort last.
     """
-    q_norm = q.strip().lower()[:60]
+    words = q.strip().lower()[:60].split()[:6]
     items = []
     for p in await db.list_products():
         if cat != "All" and p["cat"] != cat:
             continue
-        if q_norm and q_norm not in p["name"].lower() and q_norm not in p["cat"].lower():
+        if sub and p.get("sub", "") != sub:
+            continue
+        if brand and p.get("brand", "") != brand:
+            continue
+        if words and not matches_search(p, words):
             continue
         price = from_price(p)
         if min_price is not None and price < min_price:
