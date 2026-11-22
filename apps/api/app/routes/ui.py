@@ -13,7 +13,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .. import auth, catalogue, config, db, order_status, ratelimit, social
+from .. import auth, catalogue, config, db, order_status, ratelimit, social, templating
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
 from .reviews import bought_and_received, public, summarise
@@ -322,6 +322,14 @@ async def _password_page(request: Request, mode: str, token: str = "") -> HTMLRe
     r.headers["Cache-Control"] = "no-store"
     r.headers["Referrer-Policy"] = "no-referrer"
     return r
+
+
+@router.get("/photo-credits", response_class=HTMLResponse)
+async def photo_credits_page(request: Request):
+    """Who took the product photos and under which licence (some licences require this)."""
+    credited = {c["id"] for c in templating.PHOTO_CREDITS}
+    generic = [p["name"] for p in await db.list_products() if p["id"] not in credited]
+    return _render(request, "credits.html", credits=templating.PHOTO_CREDITS, generic=generic)
 
 
 @router.get("/forgot-password", response_class=HTMLResponse)

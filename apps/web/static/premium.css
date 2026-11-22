@@ -288,3 +288,13 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 /* Narrowest phones: "Create account" becomes "Join" so Sign in and Join share one row. */
 .lbl-short{display:none}
 @media (max-width:360px){.lbl-long{display:none}.lbl-short{display:inline}}
+
+/* Product pictures in the cart and checkout: small, square, rounded, with a soft placeholder while loading. */
+.line-thumb{flex:0 0 56px; width:56px; height:56px; border-radius:12px; overflow:hidden; display:grid; place-items:center; font-size:1.4rem; background:#e9eee9; box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);}
+.line-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+
+/* Shimmer behind any product photo until it has loaded, so cards never flash blank. */
+.card .thumb:has(img.photo), .pdp-media .thumb:has(img.photo), .mini-card .thumb:has(img.photo){background:linear-gradient(100deg,#e9eee9 30%,#f4f7f4 50%,#e9eee9 70%) 0 0/200% 100%; animation:ogs-shimmer 1.4s linear infinite;}
+.card .thumb img.photo, .pdp-media .thumb img.photo{position:relative; z-index:1; background:var(--frame,#e9eee9);}
+@keyframes ogs-shimmer{to{background-position:-200% 0;}}
+@media (prefers-reduced-motion: reduce){.card .thumb:has(img.photo), .pdp-media .thumb:has(img.photo), .mini-card .thumb:has(img.photo){animation:none;}}

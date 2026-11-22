@@ -35,7 +35,7 @@
       {% if p.stock is not none and p.stock <= 5 %}<div class="stock-note low">Only {{ p.stock }} left</div>{% endif %}
       <div class="qtyArea"></div>
     {% endif %}
-    <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "options": p.options}|tojson }}</script>
+    <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "photo": (p|photo_for or ""), "options": p.options}|tojson }}</script>
   </div>
 {% else %}
   <div class="empty-state" role="status">

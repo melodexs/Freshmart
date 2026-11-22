@@ -14,6 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from .. import auth, catalogue, db, discounts, images, order_status, social
+from .products import with_photo
 
 MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
 
@@ -113,7 +114,7 @@ def parse_product(b: dict, existing: dict | None) -> tuple[dict | None, str | No
 
 @router.get("/products")
 async def products():
-    return {"products": await catalogue.all_products(include_inactive=True)}
+    return {"products": with_photo(await catalogue.all_products(include_inactive=True))}
 
 
 @router.post("/products")
