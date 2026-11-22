@@ -314,7 +314,7 @@ async function products(root) {
 
 function editor(p, done) {
   const isNew = !p;
-  const f = { id: p?.id || "", name: p?.name || "", cat: p?.cat || "", emoji: p?.emoji || "", description: p?.description || "", image: p?.image || "", stock: p?.stock ?? "", active: p ? p.active : true, featured: p?.featured || false };
+  const f = { id: p?.id || "", name: p?.name || "", cat: p?.cat || "", sub: p?.sub || "", brand: p?.brand || "", emoji: p?.emoji || "", description: p?.description || "", image: p?.image || "", stock: p?.stock ?? "", active: p ? p.active : true, featured: p?.featured || false };
   const opts = (p?.options || [{ label: "", price: "" }]).map((o, i) => ({ label: o.label, price: o.price, was: p?.comparePrices?.[i] || "" }));
   const optBox = h("div");
   const drawOpts = () => optBox.replaceChildren(...opts.map((o, i) => h("div", { class: "optrow" },
@@ -355,6 +355,7 @@ function editor(p, done) {
     isNew ? field("Product code (letters, numbers, - and _)", bind("id", { required: true, maxlength: "40" })) : null,
     field("Name", bind("name", { required: true, maxlength: "80" })),
     h("div", { class: "row2" }, field("Category", bind("cat", { required: true, maxlength: "40", list: "cats" })), field("Emoji (optional)", bind("emoji", { maxlength: "8" }))),
+    h("div", { class: "row2" }, field("Type / subcategory (optional)", bind("sub", { maxlength: "40", list: "subs", placeholder: "e.g. Rice and grains" })), field("Brand (optional)", bind("brand", { maxlength: "40", list: "brands", placeholder: "Leave empty if unbranded" }))),
     field("Description", h("textarea", { maxlength: "600", oninput: (e) => (f.description = e.target.value), text: f.description })),
     h("div", {}, h("label", { text: "Product photo" }), photoBox),
     h("div", {}, h("label", { text: "Sizes and prices (old price is optional and shows a discount)" }), optBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (opts.length < 12) { opts.push({ label: "", price: "", was: "" }); drawOpts(); } }, text: "+ Add size" })),
@@ -369,11 +370,14 @@ function editor(p, done) {
         try { const r = await api(`/products/${encodeURIComponent(p.id)}`, { method: "DELETE" }); toast(r.hidden ? "Hidden (it has past orders)" : "Product removed"); close(); done(); } catch (err) { msg.textContent = err.message; }
       }, text: "Remove" })));
   const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": isNew ? "Add product" : "Edit product" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: isNew ? "Add product" : "Edit " + p.name }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
-  const dl = h("datalist", { id: "cats" });
-  api("/products").then((d) => { for (const c of new Set(d.products.map((x) => x.cat))) dl.append(h("option", { value: c })); }).catch(() => {});
+  const dl = h("datalist", { id: "cats" }), dlSubs = h("datalist", { id: "subs" }), dlBrands = h("datalist", { id: "brands" });
+  api("/products").then((d) => {
+    const fill = (list, key) => { for (const v of new Set(d.products.map((x) => x[key]).filter(Boolean))) list.append(h("option", { value: v })); };
+    fill(dl, "cat"); fill(dlSubs, "sub"); fill(dlBrands, "brand");
+  }).catch(() => {});
   const onKey = (e) => { if (e.key === "Escape") close(); };
-  function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); }
-  document.addEventListener("keydown", onKey); document.body.append(dl, modal);
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); dlSubs.remove(); dlBrands.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(dl, dlSubs, dlBrands, modal);
   (isNew ? form.querySelector("input") : form.querySelector("input")).focus();
 }
 

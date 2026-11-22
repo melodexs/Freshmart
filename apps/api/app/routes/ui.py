@@ -154,12 +154,25 @@ async def product_grid(
     min: str = "",
     max: str = "",
     favs: str = "",
+    sub: str = "",
+    brand: str = "",
 ):
     categories = ["All", *await catalogue.categories()]
+    everything = await db.list_products()
+    sub_map = catalogue.subcategories(everything)
+    brand_list = catalogue.brands(everything)
+    active_cat = cat if cat in categories else "All"
+    # Only real values are honoured; anything else is ignored rather than showing an empty page.
+    if sub not in sub_map.get(active_cat, []):
+        sub = ""
+    if brand not in brand_list:
+        brand = ""
     user = auth.current_user(request)
     fav_ids = await db.get_favourites(user["email"]) if user else []
     items = await catalogue.shelf(
-        cat=cat if cat in categories else "All",
+        cat=active_cat,
+        sub=sub,
+        brand=brand,
         q=q,
         sort=sort,
         section=section if section in ("best", "new", "offers", "featured") else "",
@@ -180,7 +193,11 @@ async def product_grid(
         "partials/products.html",
         products=items,
         categories=categories,
-        active=cat if cat in categories else "All",
+        active=active_cat,
+        subs=sub_map.get(active_cat, []),
+        active_sub=sub,
+        brands=brand_list,
+        active_brand=brand,
         heading=heading,
         fav_ids=fav_ids,
         ratings=await rating_map(),

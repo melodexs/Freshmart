@@ -1,5 +1,17 @@
 {# Product grid. Also resets the category nav + heading via out-of-band swaps. #}
 <div class="section-title"><h2 id="sectionHeading">{{ heading }}</h2><span class="result-count" id="resultCount">{{ products|length }} item{{ "" if products|length == 1 else "s" }}</span></div>
+{% if subs or brands %}
+<div class="facets" aria-label="Narrow the products">
+  {% if subs %}<div class="facet-row" role="group" aria-label="Type">
+    <button type="button" class="chip{{ ' active' if not active_sub }}" aria-pressed="{{ 'true' if not active_sub else 'false' }}" hx-get="/ui/products" hx-vals='{"cat": {{ active|tojson|forceescape }}{% if active_brand %}, "brand": {{ active_brand|tojson|forceescape }}{% endif %}}' hx-include="#filters" hx-target="#catalog">All types</button>
+    {% for s in subs %}<button type="button" class="chip{{ ' active' if s == active_sub }}" aria-pressed="{{ 'true' if s == active_sub else 'false' }}" hx-get="/ui/products" hx-vals='{"cat": {{ active|tojson|forceescape }}, "sub": {{ s|tojson|forceescape }}{% if active_brand %}, "brand": {{ active_brand|tojson|forceescape }}{% endif %}}' hx-include="#filters" hx-target="#catalog">{{ s }}</button>{% endfor %}
+  </div>{% endif %}
+  {% if brands %}<div class="facet-row" role="group" aria-label="Brand">
+    <button type="button" class="chip{{ ' active' if not active_brand }}" aria-pressed="{{ 'true' if not active_brand else 'false' }}" hx-get="/ui/products" hx-vals='{"cat": {{ active|tojson|forceescape }}{% if active_sub %}, "sub": {{ active_sub|tojson|forceescape }}{% endif %}}' hx-include="#filters" hx-target="#catalog">All brands</button>
+    {% for b in brands %}<button type="button" class="chip{{ ' active' if b == active_brand }}" aria-pressed="{{ 'true' if b == active_brand else 'false' }}" hx-get="/ui/products" hx-vals='{"cat": {{ active|tojson|forceescape }}{% if active_sub %}, "sub": {{ active_sub|tojson|forceescape }}{% endif %}, "brand": {{ b|tojson|forceescape }}}' hx-include="#filters" hx-target="#catalog">{{ b }}</button>{% endfor %}
+  </div>{% endif %}
+</div>
+{% endif %}
 <div class="grid" id="productGrid">
 {% for p in products %}
   {% set pct = discount(p, 0) %}
@@ -26,7 +38,16 @@
     <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "options": p.options}|tojson }}</script>
   </div>
 {% else %}
-  <div class="empty-note">{% if favs_only %}You have not saved any favourites yet. Tap the ♡ on a product to save it.{% else %}No products match. Try a different search or filter.{% endif %}</div>
+  <div class="empty-state" role="status">
+    <div class="empty-icon" aria-hidden="true">{{ "♡" if favs_only else "🔍" }}</div>
+    {% if favs_only %}
+      <h3>No favourites yet</h3><p>Tap the ♡ on any product to save it here for next time.</p>
+    {% else %}
+      <h3>We could not find a match</h3>
+      <p>Check the spelling, try a shorter word, or widen the price range.</p>
+      <button type="button" class="btn-primary" id="clearFilters" hx-get="/ui/products" hx-vals='{"cat": "All"}' hx-target="#catalog">Show all products</button>
+    {% endif %}
+  </div>
 {% endfor %}
 </div>
 <nav class="cats" id="catNav" hx-swap-oob="true"><div class="wrap">
