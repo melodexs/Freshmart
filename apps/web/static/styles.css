@@ -604,3 +604,6 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .code-note{font-size:.84rem; min-height:1.1em; margin:0 0 6px; color:#6b6b5e;}
 .code-note.bad{color:var(--danger);}
 .totals-row.saving{color:#1f5a3d; font-weight:600;}
+.co-fee{flex-wrap:wrap}
+.co-eta{flex:1 1 100%;margin-top:4px;font-size:.88rem;color:var(--green-700);font-weight:600}
+.eta-line{margin-top:4px;font-size:.84rem;color:#1f5a3d;font-weight:600}

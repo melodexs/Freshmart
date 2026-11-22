@@ -382,23 +382,24 @@ async function settings(root) {
   const s = await api("/settings");
   const msg = h("p", { class: "msg", role: "alert" });
   const inp = (id, label, val, extra = {}) => h("div", {}, h("label", { for: id, text: label }), h("input", { id, value: val, ...extra }));
-  const areas = s.areas.map((a) => ({ name: a.name, fee: a.fee }));
+  const areas = s.areas.map((a) => ({ name: a.name, fee: a.fee, eta: a.eta || "" }));
   const areaBox = h("div");
-  const drawAreas = () => areaBox.replaceChildren(...areas.map((a, i) => h("div", { class: "optrow", style: "grid-template-columns:2fr 1fr auto" },
+  const drawAreas = () => areaBox.replaceChildren(...areas.map((a, i) => h("div", { class: "optrow", style: "grid-template-columns:2fr 1fr 1.4fr auto" },
     h("input", { value: a.name, placeholder: "Area name", "aria-label": "Area name", oninput: (e) => (a.name = e.target.value) }),
     h("input", { type: "number", min: "0", max: "100000", value: a.fee, placeholder: "Fee ₦", "aria-label": "Delivery fee in naira", oninput: (e) => (a.fee = e.target.value) }),
+    h("input", { value: a.eta, maxlength: "40", placeholder: "Time, e.g. 1-2 hours (optional)", "aria-label": "Estimated delivery time", oninput: (e) => (a.eta = e.target.value) }),
     h("button", { type: "button", class: "btn sm danger", "aria-label": "Remove area", onclick: () => { if (areas.length > 1) { areas.splice(i, 1); drawAreas(); } }, text: "✕" }))));
   drawAreas();
   const form = h("form", { class: "form panel", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
     const body = { storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value,
-      areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee) })),
+      areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee), eta: a.eta })),
       bank: { bank: $("#sBank").value, accountName: $("#sAcctName").value, accountNumber: $("#sAcctNo").value } };
     try { await api("/settings", { method: "PUT", body }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
   } },
     h("h2", { text: "Delivery areas and fees" }),
     h("p", { class: "muted", text: "Customers choose one of these at checkout, and the fee is looked up on the server. The first area is the default." }),
-    areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "" }); drawAreas(); } }, text: "+ Add area" }),
+    areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "", eta: "" }); drawAreas(); } }, text: "+ Add area" }),
     h("h2", { style: "margin-top:18px", text: "Bank account for pay-before-delivery" }),
     h("p", { class: "muted", text: s.bank.ready ? "Customers can pay by bank transfer to this account." : "Pay-before-delivery is OFF until you enter your real account. Nothing is shown to customers until all three fields are filled." }),
     inp("sBank", "Bank", s.bank.bank, { maxlength: "60" }), inp("sAcctName", "Account name", s.bank.accountName, { maxlength: "80" }), inp("sAcctNo", "Account number (10 digits)", s.bank.accountNumber, { inputmode: "numeric", maxlength: "13" }),

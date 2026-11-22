@@ -127,6 +127,11 @@ function renderFee(): void {
     h("span", { text: "Delivery fee" }),
     h("strong", { text: money(getDeliveryFee()) }),
   );
+  // Shown only when the store has set a time for this area. Never guessed.
+  const eta = areaEtas[$<HTMLSelectElement>("coArea").value];
+  if (eta) {
+    line.append(h("div", { class: "co-eta", text: `Estimated delivery: ${eta}` }));
+  }
 }
 
 // ---------- step 3: payment ----------
@@ -275,16 +280,20 @@ async function placeOrder(): Promise<void> {
 }
 
 let areaFees: Record<string, number> = {};
+let areaEtas: Record<string, string> = {};
 
-export function setAreas(areas: { name: string; fee: number }[]): void {
+export function setAreas(areas: { name: string; fee: number; eta?: string }[]): void {
   const sel = $<HTMLSelectElement>("coArea");
   clear(sel);
   areaFees = {};
+  areaEtas = {};
   for (const a of areas) {
     areaFees[a.name] = a.fee;
+    if (a.eta) areaEtas[a.name] = a.eta;
     sel.append(h("option", { value: a.name, text: `${a.name} (${money(a.fee)})` }));
   }
   applyAreaFee();
+  renderFee();
 }
 
 function applyAreaFee(): void {
