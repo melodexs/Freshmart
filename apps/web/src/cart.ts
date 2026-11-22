@@ -218,7 +218,13 @@ function renderDrawer(): void {
       h(
         "div",
         { class: "line-item" },
-        h("div", { style: "font-size:1.4rem;", text: l.product.emoji }),
+        h(
+          "div",
+          { class: "line-thumb" },
+          l.product.photo
+            ? h("img", { src: l.product.photo, alt: "", width: "56", height: "56", loading: "lazy", decoding: "async" })
+            : h("span", { text: l.product.emoji }),
+        ),
         h(
           "div",
           { class: "grow" },

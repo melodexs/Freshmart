@@ -9,6 +9,8 @@ export interface Product {
   id: string;
   name: string;
   emoji: string;
+  /** The one picture URL for this product ('' when there is none yet). */
+  photo?: string;
   options: ProductOption[];
 }
 

@@ -91,17 +91,54 @@ def photo_for(product: dict) -> str | None:
     return url or _photo_url(str(product["id"]))
 
 
+def _small_url(url: str) -> str | None:
+    """A 400px copy of a bundled photo (`p1.webp` -> `p1-400.webp`) if one exists, for phone screens."""
+    if not url.startswith("/static/products/") or not url.endswith(".webp"):
+        return None
+    small = url[: -len(".webp")] + "-400.webp"
+    return small if (PHOTO_DIR / small.rsplit("/", 1)[1]).is_file() else None
+
+
 def product_art(product: dict) -> Markup:
     uploaded = str(product.get("image") or "")
     url = uploaded if re.fullmatch(r"/media/im[0-9a-f]{16}", uploaded) else None
     url = url or _photo_url(str(product["id"]))
     if url:
+        small = _small_url(url)
+        srcset = (
+            Markup(
+                ' srcset="{} 400w, {} 800w" sizes="(max-width: 640px) 46vw, (max-width: 1100px) 30vw, 300px"'
+            ).format(small, url)
+            if small
+            else Markup("")
+        )  # noqa: S704
         return Markup(  # noqa: S704
-            '<img class="art photo" src="{}" alt="{}" loading="lazy" width="140" height="150">'
-        ).format(url, product["name"])
+            '<img class="art photo" src="{}"{} alt="{}" loading="lazy" decoding="async" width="800" height="800">'
+        ).format(url, srcset, product["name"])
     return Markup(illustrations.svg_for(product["id"], product["name"]))  # noqa: S704
 
 
 templates.env.filters["product_art"] = product_art
 templates.env.filters["photo_for"] = photo_for
 templates.env.filters["frame_colour"] = frame_colour
+
+
+def _load_credits() -> list[dict]:
+    """Photographers and licences for the real photos. Only plain https links are ever shown."""
+    try:
+        data = json.loads((Path(__file__).parent / "photo_credits.json").read_text("utf8"))
+    except (OSError, ValueError):
+        return []
+    ok = []
+    for row in data if isinstance(data, list) else []:
+        if not isinstance(row, dict):
+            continue
+        links_ok = all(
+            str(row.get(k, "")).startswith("https://") for k in ("licence_url", "source")
+        )
+        if links_ok and row.get("id") and row.get("author"):
+            ok.append({k: str(v) for k, v in row.items()})
+    return ok
+
+
+PHOTO_CREDITS = _load_credits()

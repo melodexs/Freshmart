@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Photo credits — Okwui&#39;s Grocery Store (OGS){% endblock %}
+{% block body %}
+<main class="wrap auth-page credits-page" id="catalog">
+  <a class="logo auth-logo" href="/" aria-label="Okwui&#39;s Grocery Store (OGS) home">Okwui&#39;s Grocery Store <strong>OGS</strong></a>
+  <article class="auth-card credits-card">
+    <h1>Photo credits</h1>
+    <p class="muted">Many of our product pictures are real photographs shared by photographers under open licences. Thank you to everyone listed here. Brand names and packaging shown belong to their owners.</p>
+    <ul class="credit-list">
+      {% for c in credits %}
+      <li><strong>{{ c.product }}</strong>:
+        <a href="{{ c.source }}" target="_blank" rel="noopener noreferrer">&ldquo;{{ c.file }}&rdquo;</a>
+        {% if c.requires_credit == "True" %}by {{ c.author }}, {% endif %}<a href="{{ c.licence_url }}" target="_blank" rel="noopener noreferrer">{{ c.licence }}</a>
+        {% if c.requires_credit == "True" %}(cropped, background cleaned and colour adjusted){% else %}(cropped and background cleaned){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% if generic %}
+    <h2>Pictures that are not photographs of the real product</h2>
+    <p class="muted">These products still show a computer-generated picture of a typical item. They are not photographs of the exact product, and any brand shown is not an exact copy of its packaging. We are replacing them with real photos: {{ generic | join(", ") }}.</p>
+    {% endif %}
+  </article>
+  <p class="auth-back"><a href="/">&larr; Back to the shop</a></p>
+</main>
+{% endblock %}

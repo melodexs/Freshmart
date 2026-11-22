@@ -1,0 +1,112 @@
+[
+ {
+  "id": "p1",
+  "product": "Local Rice",
+  "file": "Uncooked ST25 rice on bamboo surface.jpg",
+  "author": "VinhNguyen.1257",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Uncooked_ST25_rice_on_bamboo_surface.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p2",
+  "product": "Semovita",
+  "file": "Masan Semovita.jpg",
+  "author": "Husnkimalika",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Masan_Semovita.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p5",
+  "product": "Palm Oil",
+  "file": "Bottles of red oil.jpg",
+  "author": "Daniel Paullll",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Bottles_of_red_oil.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p6",
+  "product": "Groundnut Oil",
+  "file": "Peanut oil bottle.jpg",
+  "author": "Adam Engelhart",
+  "licence": "CC BY-SA 2.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Peanut_oil_bottle.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p8",
+  "product": "Plantain Chips",
+  "file": "PLANTAIN CHIPS.jpg",
+  "author": "DromoTetteh",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:PLANTAIN_CHIPS.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p12",
+  "product": "Bottled Water",
+  "file": "Bottle of Water.jpg",
+  "author": "Jiafei Slay Queen",
+  "licence": "CC0",
+  "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/deed.en",
+  "source": "https://commons.wikimedia.org/wiki/File:Bottle_of_Water.jpg",
+  "requires_credit": false
+ },
+ {
+  "id": "p13",
+  "product": "Coca-Cola",
+  "file": "Bottle of Coca-Cola Dreamworld.jpg",
+  "author": "UndamagedGOODs",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Bottle_of_Coca-Cola_Dreamworld.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p15",
+  "product": "Fresh Tomatoes",
+  "file": "Fresh red tomatoes.jpg",
+  "author": "Selimee",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Fresh_red_tomatoes.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p16",
+  "product": "Onions",
+  "file": "Red Onion on White.JPG",
+  "author": "Colin",
+  "licence": "CC BY-SA 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Red_Onion_on_White.JPG",
+  "requires_credit": true
+ },
+ {
+  "id": "p17",
+  "product": "Yam Tubers",
+  "file": "Tubers of yam for sale.jpg",
+  "author": "Ibn Dagara",
+  "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+  "source": "https://commons.wikimedia.org/wiki/File:Tubers_of_yam_for_sale.jpg",
+  "requires_credit": true
+ },
+ {
+  "id": "p25",
+  "product": "Pepsi",
+  "file": "A bottle of Pepsi 2024-11-29.jpg",
+  "author": "Andy Li",
+  "licence": "CC0",
+  "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/deed.en",
+  "source": "https://commons.wikimedia.org/wiki/File:A_bottle_of_Pepsi_2024-11-29.jpg",
+  "requires_credit": false
+ }
+]
