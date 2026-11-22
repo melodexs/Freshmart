@@ -261,3 +261,30 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 .auth-back{margin:0}.auth-back a{color:#5d6b63;text-decoration:none}
 .forgot-link{display:inline-block;margin:10px 0 2px;font-size:.88rem;color:var(--green-700)}
 .auth-help[hidden],.auth-card [hidden]{display:none!important}
+
+/* ---------- subcategory and brand chips (only drawn when products have them) ---------- */
+.facets{display:grid;gap:8px;margin:2px 0 14px}
+.facet-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.facet-row::-webkit-scrollbar{display:none}
+.facet-row .chip{flex:0 0 auto;white-space:nowrap}
+
+/* ---------- empty results ---------- */
+.empty-state{grid-column:1/-1;text-align:center;padding:44px 20px;background:#fff;border:1px dashed var(--line);border-radius:18px;display:grid;justify-items:center;gap:8px}
+.empty-state .empty-icon{font-size:2.2rem;line-height:1}
+.empty-state h3{margin:4px 0 0;font-family:Fraunces,Georgia,serif;font-size:1.25rem}
+.empty-state p{margin:0 0 6px;color:#5d6b63;max-width:34ch}
+.empty-state .btn-primary{width:auto;padding:11px 22px;border-radius:999px;margin:0}
+
+/* ---------- phones: pin only the top bar ----------
+   The whole header (logo row + search + filters + categories) used to stay pinned: 257px of an 844px
+   screen, and 303px of 640 on small phones. Now only the logo, account and cart row stays; the search
+   and categories scroll away like the rest of the page. */
+@media (max-width:620px){
+  header{position:static; display:contents; backdrop-filter:none; -webkit-backdrop-filter:none; background:none; border:0;}
+  .topbar{position:sticky; top:0; z-index:40; background:rgba(11,31,22,.96); backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid rgba(240,213,140,.18);}
+  .search-row,nav.cats{background:var(--green-900,#10261b);}
+}
+
+/* Narrowest phones: "Create account" becomes "Join" so Sign in and Join share one row. */
+.lbl-short{display:none}
+@media (max-width:360px){.lbl-long{display:none}.lbl-short{display:inline}}
