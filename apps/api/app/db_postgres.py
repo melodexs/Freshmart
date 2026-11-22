@@ -90,6 +90,9 @@ async def init() -> None:
               created TIMESTAMPTZ NOT NULL DEFAULT now(), updated TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (email, product_id));
             CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
+            CREATE TABLE IF NOT EXISTS subscribers (
+              email TEXT PRIMARY KEY, subscribed TIMESTAMPTZ NOT NULL DEFAULT now(),
+              unsubscribed BOOLEAN NOT NULL DEFAULT FALSE);
             CREATE TABLE IF NOT EXISTS audit_log (
               id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
@@ -682,3 +685,36 @@ async def set_review_hidden(email: str, product_id: str, hidden: bool) -> bool:
             hidden,
         )
     return res.endswith(" 1")
+
+
+# ---- newsletter subscribers ----
+async def add_subscriber(email: str, at: str) -> bool:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            """INSERT INTO subscribers (email) VALUES ($1)
+               ON CONFLICT (email) DO UPDATE SET unsubscribed=FALSE, subscribed=now()
+               WHERE subscribers.unsubscribed
+               RETURNING email""",
+            email,
+        )
+    return row is not None
+
+
+async def remove_subscriber(email: str) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "UPDATE subscribers SET unsubscribed=TRUE WHERE email=$1 AND NOT unsubscribed", email
+        )
+    return res.endswith(" 1")
+
+
+async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT * FROM subscribers WHERE ($1 OR NOT unsubscribed) ORDER BY subscribed DESC",
+            include_unsubscribed,
+        )
+    return [
+        {"email": r["email"], "subscribed": r["subscribed"].isoformat().replace("+00:00", "Z"), "unsubscribed": r["unsubscribed"]}
+        for r in rows
+    ]  # fmt: skip

@@ -23,6 +23,7 @@ EMPTY = {
     "audit": [],
     "favourites": {},
     "reviews": [],
+    "subscribers": [],
     "addresses": {},
     "images": {},
     "stockMoves": [],
@@ -479,3 +480,39 @@ async def set_review_hidden(email: str, product_id: str, hidden: bool) -> bool:
                 _write(data)
                 return True
     return False
+
+
+# ---- newsletter subscribers (email is the key; unsubscribing keeps the row so a re-subscribe is clean) ----
+async def add_subscriber(email: str, at: str) -> bool:
+    """True if this is a new subscription (or a re-subscription), False if already subscribed."""
+    with _lock:
+        data = _read()
+        for r in data["subscribers"]:
+            if r["email"] == email:
+                if r.get("unsubscribed"):
+                    r["unsubscribed"] = False
+                    r["subscribed"] = at
+                    _write(data)
+                    return True
+                return False
+        data["subscribers"].append({"email": email, "subscribed": at, "unsubscribed": False})
+        _write(data)
+        return True
+
+
+async def remove_subscriber(email: str) -> bool:
+    with _lock:
+        data = _read()
+        for r in data["subscribers"]:
+            if r["email"] == email and not r.get("unsubscribed"):
+                r["unsubscribed"] = True
+                _write(data)
+                return True
+    return False
+
+
+async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
+    with _lock:
+        rows = list(_read()["subscribers"])
+    rows = [r for r in rows if include_unsubscribed or not r.get("unsubscribed")]
+    return sorted(rows, key=lambda r: r["subscribed"], reverse=True)
