@@ -5,6 +5,7 @@
   <input type="hidden" name="email" value="{{ known.email }}">
   <div class="field"><label>Password</label><input name="password" type="password" placeholder="At least 6 characters" required autofocus></div>
   <button class="btn-primary" type="submit">Sign in</button>
+  <a class="forgot-link" href="/forgot-password">Forgot password?</a>
   <button class="btn-ghost" type="button" hx-get="/ui/signin" hx-target="#authBody" hx-swap="innerHTML">Not you? Use a different account</button>
 </form>
 {% else %}
@@ -12,6 +13,7 @@
   <div class="field"><label>Email</label><input name="email" type="email" placeholder="you@example.com" required></div>
   <div class="field"><label>Password</label><input name="password" type="password" placeholder="At least 6 characters" required></div>
   <button class="btn-primary" type="submit">Sign in</button>
+  <a class="forgot-link" href="/forgot-password">Forgot password?</a>
   <div class="small-note">New here? Use the "Create account" button in the header instead.</div>
 </form>
 {% endif %}

@@ -289,6 +289,34 @@ async def header_account(request: Request):
     return _render(request, "partials/account.html")
 
 
+async def _password_page(request: Request, mode: str, token: str = "") -> HTMLResponse:
+    r = _render(
+        request,
+        "password.html",
+        mode=mode,
+        token=token,
+        contact_phone=await db.get_setting("contact_phone", ""),
+        whatsapp=whatsapp_link(
+            await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
+            "Hello! I need help getting back into my account.",
+        ),
+    )
+    # A reset link holds a secret: never cache it and never send it on as a referrer.
+    r.headers["Cache-Control"] = "no-store"
+    r.headers["Referrer-Policy"] = "no-referrer"
+    return r
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_page(request: Request):
+    return await _password_page(request, "forgot")
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_page(request: Request, token: str = ""):
+    return await _password_page(request, "reset", token[:200])
+
+
 @router.get("/ui/signin", response_class=HTMLResponse)
 async def signin_form(request: Request, last: str = ""):
     """Sign-in form. `last` is the last email remembered on this device."""
