@@ -83,6 +83,13 @@ async def init() -> None:
             CREATE TABLE IF NOT EXISTS favourites (
               email TEXT NOT NULL, product_id TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (email, product_id));
+            CREATE TABLE IF NOT EXISTS reviews (
+              email TEXT NOT NULL, product_id TEXT NOT NULL, name TEXT NOT NULL,
+              rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5), body TEXT NOT NULL DEFAULT '',
+              hidden BOOLEAN NOT NULL DEFAULT FALSE,
+              created TIMESTAMPTZ NOT NULL DEFAULT now(), updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY (email, product_id));
+            CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
             CREATE TABLE IF NOT EXISTS audit_log (
               id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
@@ -624,3 +631,54 @@ async def list_stock_moves(product_id: str | None, limit: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# ---- product reviews ----
+def _review(r) -> dict:
+    return {
+        "email": r["email"], "productId": r["product_id"], "name": r["name"],
+        "rating": r["rating"], "body": r["body"], "hidden": r["hidden"],
+        "created": r["created"].isoformat().replace("+00:00", "Z"),
+        "updated": r["updated"].isoformat().replace("+00:00", "Z"),
+    }  # fmt: skip
+
+
+async def save_review(r: dict) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            """INSERT INTO reviews (email,product_id,name,rating,body)
+               VALUES ($1,$2,$3,$4,$5)
+               ON CONFLICT (email,product_id) DO UPDATE
+               SET name=EXCLUDED.name, rating=EXCLUDED.rating, body=EXCLUDED.body, updated=now()""",
+            r["email"], r["productId"], r["name"], r["rating"], r["body"],
+        )  # fmt: skip
+
+
+async def list_reviews(product_id: str | None = None, include_hidden: bool = False) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            """SELECT * FROM reviews
+               WHERE ($1::text IS NULL OR product_id=$1) AND ($2 OR NOT hidden)
+               ORDER BY updated DESC""",
+            product_id, include_hidden,
+        )  # fmt: skip
+    return [_review(r) for r in rows]
+
+
+async def get_review(email: str, product_id: str) -> dict | None:
+    async with _pool.acquire() as c:
+        r = await c.fetchrow(
+            "SELECT * FROM reviews WHERE email=$1 AND product_id=$2", email, product_id
+        )
+    return _review(r) if r else None
+
+
+async def set_review_hidden(email: str, product_id: str, hidden: bool) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "UPDATE reviews SET hidden=$3 WHERE email=$1 AND product_id=$2",
+            email,
+            product_id,
+            hidden,
+        )
+    return res.endswith(" 1")
