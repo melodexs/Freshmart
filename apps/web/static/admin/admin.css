@@ -100,3 +100,12 @@ tr:last-child td{border-bottom:0}
 .rev-admin.is-hidden{opacity:.6;border-style:dashed}
 .stars-text{color:#e08a1e;letter-spacing:1px}
 .tag{background:var(--redbg);color:var(--red);padding:2px 9px;border-radius:99px;font-size:.78rem}
+
+/* ---- new-order alerts ---- */
+#nav button{position:relative}
+.badge{position:absolute;right:12px;top:50%;transform:translateY(-50%);min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:#d9531e;color:#fff;font-size:.72rem;font-weight:700;line-height:20px;text-align:center}
+.alert-banner{display:grid;gap:8px;padding:14px 16px;margin-bottom:16px;background:#fff7ec;border:1px solid #f0cf9e;border-left:4px solid #d9531e;border-radius:10px}
+.alert-banner ul{margin:0;padding-left:18px;font-size:.9rem}
+.alert-banner .link{background:none;border:0;color:var(--g7);text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+tr.fresh td{background:#fff7ec}
+tr.fresh td:first-child{box-shadow:inset 4px 0 0 #d9531e}

@@ -70,6 +70,45 @@ function go(name) {
 $("#nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) go(b.dataset.view); });
 $("#menuBtn").addEventListener("click", () => $("#side").classList.toggle("open"));
 
+// ---------- new-order alerts (inside the dashboard only: nothing is emailed or messaged) ----------
+let alertState = { newCount: 0, newIds: [], newest: [], waitingCount: 0, channels: {} };
+const BASE_TITLE = document.title;
+async function pollAlerts() {
+  try {
+    const d = await api("/alerts");
+    const grew = d.newCount > alertState.newCount;
+    alertState = d;
+    const btn = document.querySelector('#nav button[data-view="orders"]');
+    let badge = btn.querySelector(".badge");
+    if (d.newCount) {
+      if (!badge) { badge = h("span", { class: "badge", role: "status" }); btn.append(badge); }
+      badge.textContent = d.newCount > 99 ? "99+" : String(d.newCount);
+      badge.setAttribute("aria-label", `${d.newCount} new order${d.newCount === 1 ? "" : "s"}`);
+    } else if (badge) badge.remove();
+    document.title = d.newCount ? `(${d.newCount}) New orders – ${BASE_TITLE}` : BASE_TITLE;
+    if (grew && alertState.__ready) toast(`${d.newCount} new order${d.newCount === 1 ? "" : "s"} waiting`);
+    alertState.__ready = true;
+    if ($("#title").textContent === "Overview" && !document.hidden) refreshAlertBanner();
+  } catch { /* offline or signed out: the next poll tries again */ }
+}
+function alertBanner() {
+  const d = alertState;
+  if (!d.newCount && !d.waitingCount) return null;
+  const parts = [];
+  if (d.newCount) parts.push(h("strong", { text: `${d.newCount} new order${d.newCount === 1 ? "" : "s"}` }), " since you last looked. ");
+  if (d.waitingCount) parts.push(`${d.waitingCount} waiting to be processed. `);
+  return h("div", { class: "alert-banner", role: "status", id: "alertBanner" },
+    h("div", {}, ...parts, h("button", { class: "link", onclick: () => go("orders"), text: "Open orders" }),
+      h("div", { class: "muted", text: "These alerts show only while the dashboard is open. Email, WhatsApp and SMS alerts are not switched on yet." })),
+    d.newest.length ? h("ul", {}, d.newest.map((o) => h("li", {}, h("strong", { text: o.id }), ` ${naira(o.total)} · ${o.city} · ${when(o.date)}`))) : null);
+}
+function refreshAlertBanner() {
+  const old = $("#alertBanner"), fresh = alertBanner();
+  if (old && fresh) old.replaceWith(fresh); else if (old) old.remove(); else if (fresh) { const v = $("#view"); v.insertBefore(fresh, v.firstChild); }
+}
+setInterval(() => { if (!document.hidden && !$("#app").hidden) pollAlerts(); }, 45000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#app").hidden) pollAlerts(); });
+
 function pill(status) {
   const cls = /Deliver/.test(status) && !/Out/.test(status) ? "ok" : /Cancel/.test(status) ? "bad" : /Out|Prepar/.test(status) ? "warn" : "";
   return h("span", { class: "pill " + cls, text: status });
@@ -86,7 +125,9 @@ async function overview(root) {
   const max = Math.max(1, ...d.last7Days.map((x) => x.revenue));
   const chart = h("div", { class: "bar", role: "img", "aria-label": "Sales for the last 7 days" }, d.last7Days.map((x) =>
     h("div", {}, h("i", { style: `height:${Math.round((x.revenue / max) * 100)}%`, title: naira(x.revenue) }), h("b", { text: x.revenue ? naira(x.revenue) : "" }), h("span", { text: x.date.slice(5) }))));
+  await pollAlerts();
   root.replaceChildren(
+    alertBanner(),
     h("div", { class: "cards" },
       card("Total revenue", naira(d.revenue)), card("Today's sales", naira(d.todaySales)), card("Total orders", d.totalOrders),
       card("Pending orders", d.pendingOrders), card("Completed orders", d.completedOrders), card("Customers", d.customers), card("Products", d.products)),
@@ -192,10 +233,12 @@ async function newsletter(root) {
 // ---------- orders ----------
 async function orders(root) {
   let q = "", status = "";
+  await pollAlerts();
+  const freshIds = new Set(alertState.newIds);
   const list = h("div");
   const load = async () => {
     const d = await api(`/orders?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`);
-    list.replaceChildren(table(["Order", "Customer", "Items", "Total", "Status", "Action"], d.orders.map((o) => orderRow(o, load)), "No orders match."));
+    list.replaceChildren(table(["Order", "Customer", "Items", "Total", "Status", "Action"], d.orders.map((o) => { const r = orderRow(o, load); if (freshIds.has(o.id)) r.classList.add("fresh"); return r; }), "No orders match."));
     return d;
   };
   const first = await api("/orders");
@@ -203,6 +246,8 @@ async function orders(root) {
   const search = h("input", { type: "search", placeholder: "Search order, phone or email", "aria-label": "Search orders", oninput: (e) => { q = e.target.value; clearTimeout(search._t); search._t = setTimeout(load, 250); } });
   root.replaceChildren(h("div", { class: "tools" }, search, sel), list);
   await load();
+  // The rows are on screen with the new ones highlighted, so they now count as seen.
+  if (freshIds.size) { try { await api("/alerts/seen", { method: "POST" }); await pollAlerts(); } catch { /* try again next visit */ } }
 }
 function orderRow(o, reload) {
   const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Ready for dispatch", "Cancelled"], "Ready for dispatch": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
