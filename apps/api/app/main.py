@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import auth, catalogue, config, db
 from .routes import account as account_routes
 from .routes import admin as admin_routes
+from .routes import alerts as alert_routes
 from .routes import auth as auth_routes
 from .routes import newsletter as newsletter_routes
 from .routes import orders as order_routes
@@ -139,6 +140,7 @@ app.include_router(order_routes.router, prefix="/api/orders")
 app.include_router(store_routes.router, prefix="/api/store")
 app.include_router(admin_routes.router, prefix="/api/store/admin")
 app.include_router(report_routes.router, prefix="/api/store/admin")
+app.include_router(alert_routes.router, prefix="/api/store/admin")
 app.include_router(review_routes.router)
 app.include_router(newsletter_routes.router)
 app.include_router(reset_routes.router)
