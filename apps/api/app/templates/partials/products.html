@@ -15,6 +15,7 @@
     {% else %}
       <div class="unit">{{ p.options[0].label }}</div>
     {% endif %}
+    {% if ratings and ratings.get(p.id) %}{% set rt = ratings[p.id] %}<div class="card-rating" aria-label="{{ rt.average }} out of 5 from {{ rt.count }} review{{ '' if rt.count == 1 else 's' }}"><span class="stars sm">{% for i in range(1,6) %}<i class="{{ 'on' if i <= rt.average|round|int else '' }}">★</i>{% endfor %}</span><small>{{ rt.average }} ({{ rt.count }})</small></div>{% endif %}
     <div class="row"><div class="price">{{ p.options[0].price|naira }}</div>{% if pct %}<s class="was" aria-label="Previous price">{{ p.comparePrices[0]|naira }}</s>{% endif %}</div>
     {% if p.stock is not none and p.stock <= 0 %}
       <div class="stock-note sold-out">Out of stock</div>

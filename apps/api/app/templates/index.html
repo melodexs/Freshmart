@@ -128,6 +128,17 @@
   </div>
 </section>
 
+{% if testimonials %}
+<section class="wrap testimonials reveal" aria-labelledby="tmTitle">
+  <div class="section-title"><h2 id="tmTitle">What our customers say</h2><span class="muted">Reviews from customers who received their order</span></div>
+  <div class="tm-grid">
+    {% for r in testimonials %}<figure class="tm"><div class="stars sm" aria-label="{{ r.rating }} out of 5"><i class="on">{{ '★' * r.rating }}</i><i>{{ '★' * (5 - r.rating) }}</i></div>
+      <blockquote>{{ r.body }}</blockquote>
+      <figcaption><strong>{{ r.name }}</strong> on <a href="/product/{{ r.productId }}#reviews">{{ r.product }}</a></figcaption></figure>{% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="wrap faq reveal" id="about" aria-labelledby="faqTitle">
   <div class="section-title"><h2 id="faqTitle">Questions, answered</h2></div>
   <details><summary>Where do you deliver?</summary><p>We deliver in {{ areas|map(attribute="name")|join(", ") }}. Each area has its own delivery fee, which you see before you place an order.</p></details>

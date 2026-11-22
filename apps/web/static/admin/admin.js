@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, reports, orders, products, stock, discounts, customers, settings };
-const titles = { overview: "Overview", reports: "Sales reports", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, reports, reviews, orders, products, stock, discounts, customers, settings };
+const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -158,6 +158,23 @@ async function reports(root) {
   const exportRange = h("a", { class: "btn", href: "#", text: "Export this period (CSV)", onclick: (e) => { e.preventDefault(); location.href = `/api/store/admin/orders.csv?days=${days}`; } });
   root.replaceChildren(h("div", { class: "toolbar" }, range, h("span", { class: "grow" }), exportRange, exportBtn), body);
   await load();
+}
+
+// ---------- customer reviews (moderation) ----------
+async function reviews(root) {
+  const d = await api("/reviews");
+  const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+  const list = d.reviews.map((r) => h("div", { class: "panel rev-admin" + (r.hidden ? " is-hidden" : "") },
+    h("div", { class: "rev-admin-top" }, h("strong", { text: r.product }), h("span", { class: "stars-text", text: stars(r.rating) }), h("span", { class: "muted", text: `${r.name} (${r.email})` }), h("span", { class: "muted", text: when(r.updated) }), r.hidden ? h("span", { class: "tag", text: "Hidden" }) : null),
+    r.body ? h("p", { text: r.body }) : h("p", { class: "muted", text: "(rating only, no written review)" }),
+    h("button", { class: "btn sm", type: "button", text: r.hidden ? "Show again" : "Hide", onclick: async (e) => {
+      e.target.disabled = true;
+      try { await api("/reviews/hide", { method: "POST", body: { email: r.email, productId: r.productId, hidden: !r.hidden } }); toast(r.hidden ? "Review is visible again" : "Review hidden"); reviews(root); }
+      catch (err) { toast(err.message, true); e.target.disabled = false; }
+    } })));
+  root.replaceChildren(
+    h("p", { class: "muted", text: "Only customers who received a product can review it, so these are all verified purchases. You can hide a review that breaks your rules; it is kept on record and you can show it again. Reviews cannot be edited by staff." }),
+    list.length ? h("div", {}, list) : h("div", { class: "empty", text: "No reviews yet. They appear here when a customer who received a product writes one." }));
 }
 
 // ---------- orders ----------

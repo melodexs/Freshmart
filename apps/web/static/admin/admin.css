@@ -93,3 +93,10 @@ tr:last-child td{border-bottom:0}
 .rank-bar i{display:block;height:100%;background:var(--g7);border-radius:99px}
 .card small{display:block;margin-top:4px}
 .btn[download]{text-decoration:none;display:inline-flex;align-items:center}
+
+/* ---- review moderation ---- */
+.rev-admin{margin-bottom:12px}.rev-admin p{margin:8px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.rev-admin-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.rev-admin.is-hidden{opacity:.6;border-style:dashed}
+.stars-text{color:#e08a1e;letter-spacing:1px}
+.tag{background:var(--redbg);color:var(--red);padding:2px 9px;border-radius:99px;font-size:.78rem}

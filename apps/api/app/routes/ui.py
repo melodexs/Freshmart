@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from .. import auth, catalogue, config, db, order_status, ratelimit
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
+from .reviews import bought_and_received, public, summarise
 
 router = APIRouter()
 
@@ -27,6 +28,15 @@ def _first_name(user: dict | None) -> str:
 def _render(request: Request, name: str, status: int = 200, **ctx) -> HTMLResponse:
     ctx.setdefault("user", auth.current_user(request))
     return templates.TemplateResponse(request, name, ctx, status_code=status)
+
+
+async def rating_map() -> dict[str, dict]:
+    """{product id: {"average", "count"}} from visible reviews. Products without reviews are absent,
+    so a card shows stars only when real customers have rated it."""
+    by_product: dict[str, list[dict]] = {}
+    for r in await db.list_reviews():
+        by_product.setdefault(r["productId"], []).append(r)
+    return {pid: summarise(rows) for pid, rows in by_product.items()}
 
 
 def _trigger(resp: Response, event: str, detail: dict | None = None) -> Response:
@@ -49,6 +59,13 @@ CATEGORY_EMOJI = {
     "Bakery": "🍞",
     "Beauty & Personal Care": "🧼",
 }
+
+
+async def _testimonials() -> list[dict]:
+    """Real written reviews only. Empty means the home page shows no testimonials section at all."""
+    rows = [r for r in await db.list_reviews() if r["body"]][:6]
+    names = {p["id"]: p["name"] for p in await catalogue.all_products()}
+    return [{**public(r), "product": names.get(r["productId"], "")} for r in rows]
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -96,6 +113,8 @@ async def home(request: Request):
         categories=["All", *await catalogue.categories()],
         active="All",
         category_cards=cards,
+        ratings=await rating_map(),
+        testimonials=await _testimonials(),
         product_total=len(products),
         hero_picks=hero_picks,
         shelves=shelves,
@@ -163,6 +182,7 @@ async def product_grid(
         active=cat if cat in categories else "All",
         heading=heading,
         fav_ids=fav_ids,
+        ratings=await rating_map(),
         discount=catalogue.discount_percent,
         favs_only=favs == "1",
     )
@@ -201,10 +221,20 @@ async def product_page(request: Request, product_id: str):
         return _render(request, "product_missing.html", status=404)
     user = auth.current_user(request)
     fav_ids = await db.get_favourites(user["email"]) if user else []
+    visible = await db.list_reviews(p["id"])
+    mine = await db.get_review(user["email"], p["id"]) if user else None
+    can_review = (
+        bought_and_received(await db.get_orders_for_user(user["email"]), p["id"]) if user else False
+    )
     return _render(
         request,
         "product.html",
         p=p,
+        review_summary=summarise(visible),
+        reviews=[public(r) for r in visible[:50]],
+        my_review=mine,
+        can_review=can_review,
+        user_signed_in=bool(user),
         related=await catalogue.related(p),
         discount=catalogue.discount_percent,
         in_stock=catalogue.in_stock(p),

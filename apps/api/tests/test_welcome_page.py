@@ -94,6 +94,8 @@ def test_content_is_not_hidden_unless_javascript_enabled_it(client):
     for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
         sel, body = m.group(1).strip(), m.group(2)
         if re.search(r"(?<![-\w])opacity:\s*0\s*(;|$)", body):
+            if sel == ".rev-stars input":
+                continue  # star picker radios: the visible star label is the control and stays focusable
             # allowed: elements revealed by the js gate, or ones animated in by CSS itself
             assert ".js " in sel or "float-card" in sel, f"hidden without the js gate: {sel}"
 
