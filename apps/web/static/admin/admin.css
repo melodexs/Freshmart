@@ -78,3 +78,34 @@ tr:last-child td{border-bottom:0}
 .photo-preview{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #e0dac8;background:#f6f2e6}
 .photo-preview[hidden]{display:none}
 .neg{color:#9b2c2c}.pos{color:#1f5a3d}
+
+/* ---- sales reports ---- */
+.linechart{width:100%;height:auto;display:block;overflow:visible}
+.linechart .grid{stroke:#e8e2d0;stroke-width:1}
+.linechart .axis{fill:var(--mut);font-size:11px}
+.linechart .area{fill:var(--g7);opacity:.12}
+.linechart .line{fill:none;stroke:var(--g7);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.linechart .dot{fill:#fff;stroke:var(--g7);stroke-width:2}
+.linechart .dot:hover{fill:var(--g7)}
+.rank{display:grid;gap:14px}
+.rank-top{display:flex;justify-content:space-between;gap:10px;font-size:.92rem}
+.rank-bar{height:7px;background:#efe9d8;border-radius:99px;margin:6px 0 4px;overflow:hidden}
+.rank-bar i{display:block;height:100%;background:var(--g7);border-radius:99px}
+.card small{display:block;margin-top:4px}
+.btn[download]{text-decoration:none;display:inline-flex;align-items:center}
+
+/* ---- review moderation ---- */
+.rev-admin{margin-bottom:12px}.rev-admin p{margin:8px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.rev-admin-top{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.rev-admin.is-hidden{opacity:.6;border-style:dashed}
+.stars-text{color:#e08a1e;letter-spacing:1px}
+.tag{background:var(--redbg);color:var(--red);padding:2px 9px;border-radius:99px;font-size:.78rem}
+
+/* ---- new-order alerts ---- */
+#nav button{position:relative}
+.badge{position:absolute;right:12px;top:50%;transform:translateY(-50%);min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:#d9531e;color:#fff;font-size:.72rem;font-weight:700;line-height:20px;text-align:center}
+.alert-banner{display:grid;gap:8px;padding:14px 16px;margin-bottom:16px;background:#fff7ec;border:1px solid #f0cf9e;border-left:4px solid #d9531e;border-radius:10px}
+.alert-banner ul{margin:0;padding-left:18px;font-size:.9rem}
+.alert-banner .link{background:none;border:0;color:var(--g7);text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+tr.fresh td{background:#fff7ec}
+tr.fresh td:first-child{box-shadow:inset 4px 0 0 #d9531e}

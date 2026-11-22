@@ -94,6 +94,8 @@ def test_content_is_not_hidden_unless_javascript_enabled_it(client):
     for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
         sel, body = m.group(1).strip(), m.group(2)
         if re.search(r"(?<![-\w])opacity:\s*0\s*(;|$)", body):
+            if sel == ".rev-stars input":
+                continue  # star picker radios: the visible star label is the control and stays focusable
             # allowed: elements revealed by the js gate, or ones animated in by CSS itself
             assert ".js " in sel or "float-card" in sel, f"hidden without the js gate: {sel}"
 
@@ -120,3 +122,23 @@ def test_filters_never_depend_on_a_closed_details_element_on_wide_screens(client
     assert "min-width: 621px" in js  # the same breakpoint where the phone toggle disappears
     css = client.get("/static/premium.css").text
     assert "@media (max-width:620px)" in css and ".more-filters > summary{" in css
+
+
+def test_phone_header_gives_the_account_buttons_room(client):
+    """Sign in and Create account together are about 215px wide. They once sat in a 173px column and
+    slid left under the logo, so Sign in could not be tapped on a phone. The account area must span
+    the free columns instead of being squeezed, and the newsletter row must be allowed to shrink."""
+    css = client.get("/static/premium.css").text
+    assert "#account-area{grid-column:2 / -1" in css.replace("\n", "").replace("  ", "")
+    assert "minmax(0,1fr)" in css and ".auth-help[hidden]" in css
+
+
+def test_password_pages_do_not_load_the_shop_script(client):
+    for url in ("/forgot-password", "/reset-password?token=x"):
+        h = client.get(url).text
+        assert "/static/js/password.js" in h and "/static/js/main.js" not in h, url
+        assert client.get(url).headers["cache-control"] == "no-store"
+
+
+def test_sign_in_form_links_to_forgot_password(client):
+    assert 'href="/forgot-password"' in client.get("/ui/signin").text

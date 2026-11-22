@@ -22,6 +22,9 @@ EMPTY = {
     "settings": {},
     "audit": [],
     "favourites": {},
+    "reviews": [],
+    "subscribers": [],
+    "reset_tokens": [],
     "addresses": {},
     "images": {},
     "stockMoves": [],
@@ -165,6 +168,8 @@ async def save_product(p: dict) -> None:
             "id": p["id"],
             "name": p["name"],
             "cat": p["cat"],
+            "sub": p.get("sub", ""),
+            "brand": p.get("brand", ""),
             "emoji": p.get("emoji", ""),
             "description": p.get("description", ""),
             "image": p.get("image", ""),
@@ -432,3 +437,116 @@ async def list_stock_moves(product_id: str | None, limit: int) -> list[dict]:
     names = {k: v.get("name", k) for k, v in d["products"].items()}
     rows = [m for m in d["stockMoves"] if product_id is None or m["productId"] == product_id]
     return [{**m, "name": names.get(m["productId"], m["productId"])} for m in rows[:limit]]
+
+
+# ---- product reviews (a review is one row per customer per product) ----
+async def save_review(r: dict) -> None:
+    """Insert or replace this customer's review of this product. Hidden state is kept on edit."""
+    with _lock:
+        data = _read()
+        rows = data["reviews"]
+        for i, old in enumerate(rows):
+            if old["email"] == r["email"] and old["productId"] == r["productId"]:
+                rows[i] = {**r, "created": old["created"], "hidden": old.get("hidden", False)}
+                break
+        else:
+            rows.append({**r, "hidden": False})
+        _write(data)
+
+
+async def list_reviews(product_id: str | None = None, include_hidden: bool = False) -> list[dict]:
+    with _lock:
+        rows = list(_read()["reviews"])
+    rows = [
+        r
+        for r in rows
+        if (product_id is None or r["productId"] == product_id)
+        and (include_hidden or not r.get("hidden"))
+    ]
+    return sorted(rows, key=lambda r: r["updated"], reverse=True)
+
+
+async def get_review(email: str, product_id: str) -> dict | None:
+    with _lock:
+        for r in _read()["reviews"]:
+            if r["email"] == email and r["productId"] == product_id:
+                return dict(r)
+    return None
+
+
+async def set_review_hidden(email: str, product_id: str, hidden: bool) -> bool:
+    with _lock:
+        data = _read()
+        for r in data["reviews"]:
+            if r["email"] == email and r["productId"] == product_id:
+                r["hidden"] = hidden
+                _write(data)
+                return True
+    return False
+
+
+# ---- newsletter subscribers (email is the key; unsubscribing keeps the row so a re-subscribe is clean) ----
+async def add_subscriber(email: str, at: str) -> bool:
+    """True if this is a new subscription (or a re-subscription), False if already subscribed."""
+    with _lock:
+        data = _read()
+        for r in data["subscribers"]:
+            if r["email"] == email:
+                if r.get("unsubscribed"):
+                    r["unsubscribed"] = False
+                    r["subscribed"] = at
+                    _write(data)
+                    return True
+                return False
+        data["subscribers"].append({"email": email, "subscribed": at, "unsubscribed": False})
+        _write(data)
+        return True
+
+
+async def remove_subscriber(email: str) -> bool:
+    with _lock:
+        data = _read()
+        for r in data["subscribers"]:
+            if r["email"] == email and not r.get("unsubscribed"):
+                r["unsubscribed"] = True
+                _write(data)
+                return True
+    return False
+
+
+async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
+    with _lock:
+        rows = list(_read()["subscribers"])
+    rows = [r for r in rows if include_unsubscribed or not r.get("unsubscribed")]
+    return sorted(rows, key=lambda r: r["subscribed"], reverse=True)
+
+
+# ---- password reset tokens: only the hash of a token is kept, never the token itself ----
+async def add_reset_token(token_hash: str, email: str, expires: float) -> None:
+    with _lock:
+        data = _read()
+        # Drop expired rows and any older tokens for this email, so only the newest link works.
+        import time as _t
+
+        data["reset_tokens"] = [
+            t for t in data["reset_tokens"] if t["expires"] > _t.time() and t["email"] != email
+        ]
+        data["reset_tokens"].append({"hash": token_hash, "email": email, "expires": expires})
+        _write(data)
+
+
+async def use_reset_token(token_hash: str, now: float) -> str | None:
+    """Consume a token: returns its email once, and never again. Expired or unknown gives None."""
+    with _lock:
+        data = _read()
+        found = next((t for t in data["reset_tokens"] if t["hash"] == token_hash), None)
+        if not found:
+            return None
+        data["reset_tokens"].remove(found)
+        _write(data)
+        return found["email"] if found["expires"] > now else None
+
+
+async def peek_reset_token(token_hash: str, now: float) -> bool:
+    with _lock:
+        return any(t["hash"] == token_hash and t["expires"] > now for t in _read()["reset_tokens"])

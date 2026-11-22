@@ -15,6 +15,7 @@
       {%- endfor -%}
     </div>
     {% if o.note %}<div style="margin-top:4px;">Note: {{ o.note }}</div>{% endif %}
+    {% if o.paymentDetail and o.paymentDetail.eta and o.status not in ("Delivered", "Cancelled") %}<div class="eta-line">Estimated delivery: {{ o.paymentDetail.eta }}</div>{% endif %}
     {% include "partials/order_progress.html" %}
     {% set reorderable = o["items"] | selectattr("productId", "defined") | list %}
     {% if reorderable %}

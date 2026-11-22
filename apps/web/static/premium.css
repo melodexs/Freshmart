@@ -155,6 +155,15 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 /* ---------- compact phone header: the welcome message must be on the first screen ---------- */
 @media (max-width:620px){
   .topbar{padding:10px 14px 8px; gap:8px;}
+  /* Sign in + Create account are about 215px wide: too wide for the narrow column beside the logo, where
+     the overflow slid left under the logo and Sign in could not be tapped. They get the space instead
+     and Orders / Track / Cart keep their own row below. */
+  .topbar{grid-template-columns:auto 1fr auto; padding-left:12px; padding-right:12px;}
+  #account-area{grid-column:2 / -1; justify-content:flex-end; overflow:visible; gap:6px; flex-wrap:wrap;}
+  .topbar > .icon-btn{min-width:0; justify-content:center; padding-left:8px; padding-right:8px;}
+  #ordersBtn{grid-column:1; justify-self:stretch;}
+  #trackBtn{grid-column:2; justify-self:stretch;}
+  #cartBtn{grid-column:3; justify-self:stretch;}
   .logo{font-size:1.25rem;}
   .topbar .icon-btn{padding:6px 10px; font-size:.8rem;}
   .search-row{padding:0 0 8px;}
@@ -191,3 +200,91 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 }
 @media (max-width:380px){ .hero-badge{bottom:-40px; width:70px; height:70px;} .hero{padding-bottom:84px;} }
 .hero h1 .h1-line2{display:block;}
+
+/* ---------- product reviews ---------- */
+.reviews{margin:34px 0 10px;padding:22px;background:#fff;border:1px solid var(--line);border-radius:16px}
+.reviews h2{margin:0 0 14px}
+.stars{display:inline-flex;gap:2px;font-size:1.15rem;line-height:1}
+.stars i{font-style:normal;color:#d9d3c0}.stars i.on{color:#e08a1e}
+.stars.sm{font-size:.95rem}.stars.sm i{color:#d9d3c0}.stars.sm i.on{color:#e08a1e}
+.rev-summary{display:grid;grid-template-columns:minmax(180px,230px) 1fr;gap:26px;align-items:center;margin-bottom:18px}
+.rev-avg strong{font-size:2.6rem;font-family:Fraunces,Georgia,serif;margin-right:8px;color:var(--green-900)}
+.rev-avg small{display:block;margin-top:6px;color:#5d6b63}
+.rev-bars{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-size:.82rem;color:#5d6b63}
+.rev-bars li{display:grid;grid-template-columns:30px 1fr 24px;gap:8px;align-items:center}
+.rev-bars b{height:7px;background:#efe9d8;border-radius:99px;overflow:hidden;display:block}
+.rev-bars b i{display:block;height:100%;background:#e08a1e;border-radius:99px}
+.rev-list{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.rev{padding-top:14px;border-top:1px solid var(--line)}
+.rev-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.rev-head small{color:#7a857e}.rev-head em{font-style:normal;font-size:.76rem;color:var(--green-700);background:#e7f0ea;padding:2px 9px;border-radius:99px}
+.rev p{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.rev-empty,.rev-note{margin:0}
+.rev-form{margin-top:20px;padding-top:18px;border-top:1px solid var(--line);display:grid;gap:10px;max-width:520px}
+.rev-form h3{margin:0}
+.rev-form textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;resize:vertical}
+.rev-stars{border:0;margin:0;padding:0;display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:2px}
+.rev-stars legend{float:left;width:100%;font-size:.9rem;margin-bottom:4px;padding:0}
+.rev-stars input{position:absolute;opacity:0;pointer-events:none}
+.rev-stars label{font-size:2rem;line-height:1;color:#d9d3c0;cursor:pointer;padding:2px 3px}
+.rev-stars input:checked ~ label,.rev-stars label:hover,.rev-stars label:hover ~ label{color:#e08a1e}
+.rev-stars input:focus-visible + label{outline:2px solid var(--green-700);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.rev-msg{margin:0;min-height:1.2em;font-size:.9rem}.rev-msg.ok{color:#1f5a3d}.rev-msg.bad{color:#a4331f}
+@media (max-width:620px){.reviews{padding:16px}.rev-summary{grid-template-columns:1fr;gap:14px}}
+.card-rating{display:flex;align-items:center;gap:6px;margin:2px 0 4px}.card-rating small{color:#5d6b63;font-size:.78rem}
+.tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.tm{margin:0;padding:18px;background:#fff;border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;gap:10px}
+.tm blockquote{margin:0;font-family:Fraunces,Georgia,serif;font-size:1.02rem;line-height:1.5;overflow-wrap:anywhere}
+.tm figcaption{margin-top:auto;font-size:.85rem;color:#5d6b63}
+
+/* ---------- footer: newsletter and social links ---------- */
+.news{display:grid;grid-template-columns:1fr minmax(260px,430px);gap:12px 28px;align-items:center;padding:22px 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.14)}
+.news h3{margin:0 0 4px}.news p{margin:0;opacity:.85;font-size:.9rem}
+.news-row{display:flex;gap:8px}
+.news-row input{flex:1 1 0;width:0;min-width:0;padding:12px 14px;border-radius:999px;border:0;font:inherit;background:#fff;color:#1b211c}
+.news-row .btn-primary{width:auto;margin:0;padding:12px 20px;border-radius:999px;white-space:nowrap}
+.news-msg{grid-column:1/-1;min-height:1.2em;font-size:.88rem}.news-msg.ok{color:#bff0cf}.news-msg.bad{color:#ffd0c4}
+.social{display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 14px}
+.social a{padding:7px 14px;border:1px solid rgba(255,255,255,.28);border-radius:999px;font-size:.85rem;text-decoration:none}
+.social a:hover{background:rgba(255,255,255,.12)}
+@media (max-width:700px){.news{grid-template-columns:minmax(0,1fr)}.news-row{min-width:0}.news-row .btn-primary{flex:0 0 auto;padding:12px 16px}}
+
+/* ---------- forgot / reset password pages ---------- */
+.auth-page{max-width:460px;margin:0 auto;padding:36px 16px 60px;display:grid;gap:18px;justify-items:center}
+.auth-logo{font-family:Fraunces,Georgia,serif;font-size:1.25rem;text-decoration:none;color:var(--green-900)}
+.auth-card{width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px;display:grid;gap:12px;box-shadow:0 10px 30px rgba(16,38,27,.06)}
+.auth-card h1{margin:0;font-size:1.5rem}.auth-card .muted{margin:0}
+.auth-msg{margin:0;min-height:1.3em;font-size:.92rem}.auth-msg.ok{color:#1f5a3d}.auth-msg.bad{color:#a4331f}
+.auth-help{display:grid;gap:6px;padding:12px 14px;background:#f6f2e7;border-radius:12px;font-size:.92rem}
+.auth-help a{font-weight:600;color:var(--green-700)}
+.auth-back{margin:0}.auth-back a{color:#5d6b63;text-decoration:none}
+.forgot-link{display:inline-block;margin:10px 0 2px;font-size:.88rem;color:var(--green-700)}
+.auth-help[hidden],.auth-card [hidden]{display:none!important}
+
+/* ---------- subcategory and brand chips (only drawn when products have them) ---------- */
+.facets{display:grid;gap:8px;margin:2px 0 14px}
+.facet-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.facet-row::-webkit-scrollbar{display:none}
+.facet-row .chip{flex:0 0 auto;white-space:nowrap}
+
+/* ---------- empty results ---------- */
+.empty-state{grid-column:1/-1;text-align:center;padding:44px 20px;background:#fff;border:1px dashed var(--line);border-radius:18px;display:grid;justify-items:center;gap:8px}
+.empty-state .empty-icon{font-size:2.2rem;line-height:1}
+.empty-state h3{margin:4px 0 0;font-family:Fraunces,Georgia,serif;font-size:1.25rem}
+.empty-state p{margin:0 0 6px;color:#5d6b63;max-width:34ch}
+.empty-state .btn-primary{width:auto;padding:11px 22px;border-radius:999px;margin:0}
+
+/* ---------- phones: pin only the top bar ----------
+   The whole header (logo row + search + filters + categories) used to stay pinned: 257px of an 844px
+   screen, and 303px of 640 on small phones. Now only the logo, account and cart row stays; the search
+   and categories scroll away like the rest of the page. */
+@media (max-width:620px){
+  header{position:static; display:contents; backdrop-filter:none; -webkit-backdrop-filter:none; background:none; border:0;}
+  .topbar{position:sticky; top:0; z-index:40; background:rgba(11,31,22,.96); backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid rgba(240,213,140,.18);}
+  .search-row,nav.cats{background:var(--green-900,#10261b);}
+}
+
+/* Narrowest phones: "Create account" becomes "Join" so Sign in and Join share one row. */
+.lbl-short{display:none}
+@media (max-width:360px){.lbl-long{display:none}.lbl-short{display:inline}}

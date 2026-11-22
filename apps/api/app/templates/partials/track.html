@@ -7,6 +7,7 @@
     <div style="margin-top:4px;">
       {%- for i in o["items"] -%}{{ i.qty }}× {{ i.name }}{% if not loop.last %}, {% endif %}{%- endfor -%}
     </div>
+    {% if o.paymentDetail and o.paymentDetail.eta and o.status not in ("Delivered", "Cancelled") %}<div class="eta-line">Estimated delivery: {{ o.paymentDetail.eta }}</div>{% endif %}
     {% include "partials/order_progress.html" %}
   </div>
   <button type="button" class="btn-ghost" style="margin-top:10px;" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML">Track another order</button>

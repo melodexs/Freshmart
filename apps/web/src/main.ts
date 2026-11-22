@@ -256,7 +256,7 @@ function init(): void {
   if (cfg) {
     const parsed = JSON.parse(cfg) as {
       deliveryFee?: number;
-      areas?: { name: string; fee: number }[];
+      areas?: { name: string; fee: number; eta?: string }[];
       bank?: { bank: string; accountName: string; accountNumber: string; ready: boolean };
     };
     if (typeof parsed.deliveryFee === "number") setDeliveryFee(parsed.deliveryFee);

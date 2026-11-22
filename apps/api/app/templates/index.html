@@ -128,6 +128,17 @@
   </div>
 </section>
 
+{% if testimonials %}
+<section class="wrap testimonials reveal" aria-labelledby="tmTitle">
+  <div class="section-title"><h2 id="tmTitle">What our customers say</h2><span class="muted">Reviews from customers who received their order</span></div>
+  <div class="tm-grid">
+    {% for r in testimonials %}<figure class="tm"><div class="stars sm" aria-label="{{ r.rating }} out of 5"><i class="on">{{ '★' * r.rating }}</i><i>{{ '★' * (5 - r.rating) }}</i></div>
+      <blockquote>{{ r.body }}</blockquote>
+      <figcaption><strong>{{ r.name }}</strong> on <a href="/product/{{ r.productId }}#reviews">{{ r.product }}</a></figcaption></figure>{% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="wrap faq reveal" id="about" aria-labelledby="faqTitle">
   <div class="section-title"><h2 id="faqTitle">Questions, answered</h2></div>
   <details><summary>Where do you deliver?</summary><p>We deliver in {{ areas|map(attribute="name")|join(", ") }}. Each area has its own delivery fee, which you see before you place an order.</p></details>
@@ -146,28 +157,7 @@
   </div>
 </section>
 
-<footer class="site-footer">
-  <div class="wrap">
-    <div class="foot-grid">
-      <div>
-        <div class="foot-brand">Okwui&#39;s Grocery Store <strong>OGS</strong></div>
-        <p>Your online supermarket in Otukpo, Benue State. Fresh groceries and household essentials, delivered to your door.</p>
-      </div>
-      <div>
-        <h3>Shop</h3>
-        <a href="/#catalog">All products</a>
-        <button type="button" class="link-btn" data-open-modal="trackOverlay" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML">Track an order</button>
-      </div>
-      <div>
-        <h3>Contact</h3>
-        {% if whatsapp %}<a href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>{% endif %}
-        {% if contact_phone %}<a href="tel:{{ contact_phone }}">{{ contact_phone }}</a>{% endif %}
-        <span>Otukpo, Benue State, Nigeria</span>
-      </div>
-    </div>
-    <div class="foot-base">&copy; Okwui&#39;s Grocery Store (OGS). All prices are in Nigerian naira.</div>
-  </div>
-</footer>
+{% include "partials/site_footer.html" %}
 
 <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top" hidden>↑</button>
 

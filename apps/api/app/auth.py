@@ -38,15 +38,29 @@ def clear_auth_cookie(response: Response) -> None:
     response.delete_cookie(config.COOKIE_NAME, path="/")
 
 
+# Sessions issued before a user's last password reset are dead. Only users who have reset appear here,
+# so the check on each request is a single dictionary lookup, with no database call.
+_revoked_before: dict[str, int] = {}
+
+
+def revoke_sessions_before(email: str, when: int) -> None:
+    """Called after a reset: any session issued before `when` stops working immediately."""
+    _revoked_before[email] = when
+
+
 def current_user(request: Request) -> dict | None:
     """Return the session payload, or None. Never raises."""
     token = request.cookies.get(config.COOKIE_NAME)
     if not token:
         return None
     try:
-        return jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"])
+        payload = jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"])
     except jwt.PyJWTError:
         return None
+    cutoff = _revoked_before.get(payload.get("email", ""))
+    if cutoff and int(payload.get("iat", 0)) < cutoff:
+        return None
+    return payload
 
 
 def require_auth(request: Request) -> dict:

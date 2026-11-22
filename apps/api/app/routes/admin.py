@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, discounts, images, order_status
+from .. import auth, catalogue, db, discounts, images, order_status, social
 
 MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
 
@@ -97,6 +97,8 @@ def parse_product(b: dict, existing: dict | None) -> tuple[dict | None, str | No
         "id": pid,
         "name": name,
         "cat": cat,
+        "sub": clean_text(b.get("sub"), 40),
+        "brand": clean_text(b.get("brand"), 40),
         "emoji": clean_text(b.get("emoji"), 8),
         "description": clean_text(b.get("description"), 600),
         "image": image,
@@ -193,6 +195,12 @@ async def get_settings():
         "banner": await db.get_setting("banner", ""),
         "bank": await catalogue.bank_details(),
         "areas": await catalogue.delivery_areas(),
+        "social": {
+            k: v
+            for k, v in (await db.get_setting("social", {}) or {}).items()
+            if k in social.NETWORKS
+        },
+        "socialNetworks": {k: v[0] for k, v in social.NETWORKS.items()},
     }
 
 
@@ -225,7 +233,8 @@ async def put_settings(request: Request):
             if name.lower() in seen:
                 return err(400, f"The area '{name}' is listed twice.")
             seen.add(name.lower())
-            areas.append({"name": name, "fee": fee})
+            eta = clean_text(a.get("eta"), 40)
+            areas.append({"name": name, "fee": fee, "eta": eta})
         await db.set_setting("delivery_areas", areas)
         await db.add_audit("admin", "delivery_areas_changed", "settings", {"areas": areas})
     if "bank" in b:
@@ -248,6 +257,22 @@ async def put_settings(request: Request):
             "settings",
             {"bank": bank, "accountNumberEnding": number[-4:]},
         )
+    if "social" in b:
+        raw = b["social"] if isinstance(b["social"], dict) else {}
+        links = {}
+        for net in social.NETWORKS:
+            if net not in raw:
+                continue
+            url = social.clean_social(net, raw[net])
+            if url is None:
+                return err(
+                    400,
+                    f"That is not a valid {social.NETWORKS[net][0]} link. Paste the full https address of your page.",
+                )
+            links[net] = url
+        current = await db.get_setting("social", {}) or {}
+        await db.set_setting("social", {**current, **links})
+        await db.add_audit("admin", "social_links_changed", "settings", {"networks": sorted(links)})
     for key, setting in (("whatsapp", "whatsapp"), ("contactPhone", "contact_phone")):
         if key in b:
             from ..phone import normalise

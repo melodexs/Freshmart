@@ -48,6 +48,39 @@
       </div>
     </div>
   </div>
+  <section class="reviews" id="reviews" aria-labelledby="revTitle">
+    <h2 id="revTitle">Customer reviews</h2>
+    {% if review_summary.count %}
+    <div class="rev-summary">
+      <div class="rev-avg"><strong>{{ review_summary.average }}</strong><span class="stars" aria-label="{{ review_summary.average }} out of 5 stars">{% for i in range(1,6) %}<i class="{{ 'on' if i <= review_summary.average|round|int else '' }}">★</i>{% endfor %}</span>
+        <small>{{ review_summary.count }} review{{ '' if review_summary.count == 1 else 's' }} from customers who received this product</small></div>
+      <ul class="rev-bars">{% for n in [5,4,3,2,1] %}{% set c = review_summary.stars[n|string] %}
+        <li><span>{{ n }}★</span><b><i style="width:{{ (c * 100 // review_summary.count) }}%"></i></b><span>{{ c }}</span></li>{% endfor %}</ul>
+    </div>
+    <ul class="rev-list">
+      {% for r in reviews %}<li class="rev"><div class="rev-head"><strong>{{ r.name }}</strong><span class="stars sm" aria-label="{{ r.rating }} out of 5"><i class="on">{{ '★' * r.rating }}</i><i>{{ '★' * (5 - r.rating) }}</i></span><small>{{ r.date }}</small><em>Verified purchase</em></div>
+        {% if r.body %}<p>{{ r.body }}</p>{% endif %}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted rev-empty">No reviews yet. Reviews appear here from customers who have received this product.</p>
+    {% endif %}
+    {% if can_review %}
+    <form class="rev-form" id="reviewForm" data-product="{{ p.id }}">
+      <h3>{{ 'Update your review' if my_review else 'Write a review' }}</h3>
+      <fieldset class="rev-stars"><legend>Your rating</legend>
+        {% for n in [5,4,3,2,1] %}<input type="radio" id="rs{{ n }}" name="rating" value="{{ n }}"{% if my_review and my_review.rating == n %} checked{% endif %}><label for="rs{{ n }}" title="{{ n }} star{{ '' if n == 1 else 's' }}">★<span class="sr">{{ n }} star{{ '' if n == 1 else 's' }}</span></label>{% endfor %}
+      </fieldset>
+      <label for="revBody" class="pdp-label">Your review (optional)</label>
+      <textarea id="revBody" name="body" maxlength="600" rows="3" placeholder="What did you think of it?">{{ my_review.body if my_review else '' }}</textarea>
+      <button class="btn-primary" type="submit">{{ 'Save changes' if my_review else 'Post review' }}</button>
+      <p class="rev-msg" id="revMsg" role="status"></p>
+    </form>
+    {% elif user_signed_in %}
+    <p class="muted rev-note">You can review this product after an order containing it has been delivered.</p>
+    {% else %}
+    <p class="muted rev-note"><a href="/#catalog" data-open-signin>Sign in</a> to review products you have received.</p>
+    {% endif %}
+  </section>
   {% if related %}
   <section class="pdp-related" aria-labelledby="relTitle"><h2 id="relTitle">You may also like</h2>
     <div class="grid" id="relatedGrid">
@@ -64,5 +97,6 @@
 <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top" hidden>↑</button>
 <div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
 {% include "partials/modals.html" %}
+<script src="/static/js/reviews.js" defer></script>
 <script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee, "areas": areas, "bank": bank}|tojson }}</script>
 {% endblock %}

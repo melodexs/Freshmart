@@ -62,6 +62,9 @@ async def init() -> None:
               stock INTEGER, active BOOLEAN NOT NULL DEFAULT TRUE,
               featured BOOLEAN NOT NULL DEFAULT FALSE, sort INTEGER NOT NULL DEFAULT 0,
               updated TIMESTAMPTZ NOT NULL DEFAULT now());
+            -- Optional, additive: existing products keep working with empty values.
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS subcategory TEXT NOT NULL DEFAULT '';
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT NOT NULL DEFAULT '';
             CREATE TABLE IF NOT EXISTS stock_moves (
               id BIGSERIAL PRIMARY KEY, product_id TEXT NOT NULL, change INTEGER NOT NULL,
               after INTEGER, reason TEXT NOT NULL, order_id TEXT, actor TEXT NOT NULL,
@@ -83,6 +86,19 @@ async def init() -> None:
             CREATE TABLE IF NOT EXISTS favourites (
               email TEXT NOT NULL, product_id TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY (email, product_id));
+            CREATE TABLE IF NOT EXISTS reviews (
+              email TEXT NOT NULL, product_id TEXT NOT NULL, name TEXT NOT NULL,
+              rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5), body TEXT NOT NULL DEFAULT '',
+              hidden BOOLEAN NOT NULL DEFAULT FALSE,
+              created TIMESTAMPTZ NOT NULL DEFAULT now(), updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY (email, product_id));
+            CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
+            CREATE TABLE IF NOT EXISTS reset_tokens (
+              hash TEXT PRIMARY KEY, email TEXT NOT NULL, expires DOUBLE PRECISION NOT NULL);
+            CREATE INDEX IF NOT EXISTS reset_tokens_email_idx ON reset_tokens (email);
+            CREATE TABLE IF NOT EXISTS subscribers (
+              email TEXT PRIMARY KEY, subscribed TIMESTAMPTZ NOT NULL DEFAULT now(),
+              unsubscribed BOOLEAN NOT NULL DEFAULT FALSE);
             CREATE TABLE IF NOT EXISTS audit_log (
               id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
@@ -262,6 +278,8 @@ def _product(r) -> dict:
         "id": r["id"],
         "name": r["name"],
         "cat": r["category"],
+        "sub": r["subcategory"],
+        "brand": r["brand"],
         "emoji": r["emoji"],
         "description": r["description"],
         "image": r["image"],
@@ -294,11 +312,11 @@ async def save_product(p: dict) -> None:
     async with _pool.acquire() as c:
         await c.execute(
             """INSERT INTO products (id,name,category,emoji,description,image,options,
-                 compare_prices,stock,active,featured,sort,updated)
-               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now())
+                 compare_prices,stock,active,featured,sort,subcategory,brand,updated)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14,now())
                ON CONFLICT (id) DO UPDATE SET name=$2, category=$3, emoji=$4, description=$5,
                  image=$6, options=$7::jsonb, compare_prices=$8::jsonb, stock=$9, active=$10,
-                 featured=$11, sort=$12, updated=now()""",
+                 featured=$11, sort=$12, subcategory=$13, brand=$14, updated=now()""",
             p["id"],
             p["name"],
             p["cat"],
@@ -311,6 +329,8 @@ async def save_product(p: dict) -> None:
             bool(p.get("active", True)),
             bool(p.get("featured", False)),
             int(p.get("sort", 0)),
+            p.get("sub", ""),
+            p.get("brand", ""),
         )
 
 
@@ -624,3 +644,121 @@ async def list_stock_moves(product_id: str | None, limit: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# ---- product reviews ----
+def _review(r) -> dict:
+    return {
+        "email": r["email"], "productId": r["product_id"], "name": r["name"],
+        "rating": r["rating"], "body": r["body"], "hidden": r["hidden"],
+        "created": r["created"].isoformat().replace("+00:00", "Z"),
+        "updated": r["updated"].isoformat().replace("+00:00", "Z"),
+    }  # fmt: skip
+
+
+async def save_review(r: dict) -> None:
+    async with _pool.acquire() as c:
+        await c.execute(
+            """INSERT INTO reviews (email,product_id,name,rating,body)
+               VALUES ($1,$2,$3,$4,$5)
+               ON CONFLICT (email,product_id) DO UPDATE
+               SET name=EXCLUDED.name, rating=EXCLUDED.rating, body=EXCLUDED.body, updated=now()""",
+            r["email"], r["productId"], r["name"], r["rating"], r["body"],
+        )  # fmt: skip
+
+
+async def list_reviews(product_id: str | None = None, include_hidden: bool = False) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            """SELECT * FROM reviews
+               WHERE ($1::text IS NULL OR product_id=$1) AND ($2 OR NOT hidden)
+               ORDER BY updated DESC""",
+            product_id, include_hidden,
+        )  # fmt: skip
+    return [_review(r) for r in rows]
+
+
+async def get_review(email: str, product_id: str) -> dict | None:
+    async with _pool.acquire() as c:
+        r = await c.fetchrow(
+            "SELECT * FROM reviews WHERE email=$1 AND product_id=$2", email, product_id
+        )
+    return _review(r) if r else None
+
+
+async def set_review_hidden(email: str, product_id: str, hidden: bool) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "UPDATE reviews SET hidden=$3 WHERE email=$1 AND product_id=$2",
+            email,
+            product_id,
+            hidden,
+        )
+    return res.endswith(" 1")
+
+
+# ---- newsletter subscribers ----
+async def add_subscriber(email: str, at: str) -> bool:
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            """INSERT INTO subscribers (email) VALUES ($1)
+               ON CONFLICT (email) DO UPDATE SET unsubscribed=FALSE, subscribed=now()
+               WHERE subscribers.unsubscribed
+               RETURNING email""",
+            email,
+        )
+    return row is not None
+
+
+async def remove_subscriber(email: str) -> bool:
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            "UPDATE subscribers SET unsubscribed=TRUE WHERE email=$1 AND NOT unsubscribed", email
+        )
+    return res.endswith(" 1")
+
+
+async def list_subscribers(include_unsubscribed: bool = False) -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT * FROM subscribers WHERE ($1 OR NOT unsubscribed) ORDER BY subscribed DESC",
+            include_unsubscribed,
+        )
+    return [
+        {"email": r["email"], "subscribed": r["subscribed"].isoformat().replace("+00:00", "Z"), "unsubscribed": r["unsubscribed"]}
+        for r in rows
+    ]  # fmt: skip
+
+
+# ---- password reset tokens (hash only) ----
+async def add_reset_token(token_hash: str, email: str, expires: float) -> None:
+    import time as _t
+
+    async with _pool.acquire() as c, c.transaction():
+        await c.execute(
+            "DELETE FROM reset_tokens WHERE expires < $1 OR email = $2", _t.time(), email
+        )
+        await c.execute(
+            "INSERT INTO reset_tokens (hash, email, expires) VALUES ($1,$2,$3)",
+            token_hash,
+            email,
+            expires,
+        )
+
+
+async def use_reset_token(token_hash: str, now: float) -> str | None:
+    """Atomic: the row is deleted in the same statement that reads it, so a token can never be used twice."""
+    async with _pool.acquire() as c:
+        row = await c.fetchrow(
+            "DELETE FROM reset_tokens WHERE hash = $1 RETURNING email, expires", token_hash
+        )
+    return row["email"] if row and row["expires"] > now else None
+
+
+async def peek_reset_token(token_hash: str, now: float) -> bool:
+    async with _pool.acquire() as c:
+        return bool(
+            await c.fetchval(
+                "SELECT 1 FROM reset_tokens WHERE hash = $1 AND expires > $2", token_hash, now
+            )
+        )

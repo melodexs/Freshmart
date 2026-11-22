@@ -59,8 +59,8 @@ $("#logout").addEventListener("click", async () => {
 });
 
 // ---------- navigation ----------
-const views = { overview, orders, products, stock, discounts, customers, settings };
-const titles = { overview: "Overview", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, reports, reviews, newsletter, orders, products, stock, discounts, customers, settings };
+const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", newsletter: "Newsletter", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -69,6 +69,45 @@ function go(name) {
 }
 $("#nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) go(b.dataset.view); });
 $("#menuBtn").addEventListener("click", () => $("#side").classList.toggle("open"));
+
+// ---------- new-order alerts (inside the dashboard only: nothing is emailed or messaged) ----------
+let alertState = { newCount: 0, newIds: [], newest: [], waitingCount: 0, channels: {} };
+const BASE_TITLE = document.title;
+async function pollAlerts() {
+  try {
+    const d = await api("/alerts");
+    const grew = d.newCount > alertState.newCount;
+    alertState = d;
+    const btn = document.querySelector('#nav button[data-view="orders"]');
+    let badge = btn.querySelector(".badge");
+    if (d.newCount) {
+      if (!badge) { badge = h("span", { class: "badge", role: "status" }); btn.append(badge); }
+      badge.textContent = d.newCount > 99 ? "99+" : String(d.newCount);
+      badge.setAttribute("aria-label", `${d.newCount} new order${d.newCount === 1 ? "" : "s"}`);
+    } else if (badge) badge.remove();
+    document.title = d.newCount ? `(${d.newCount}) New orders – ${BASE_TITLE}` : BASE_TITLE;
+    if (grew && alertState.__ready) toast(`${d.newCount} new order${d.newCount === 1 ? "" : "s"} waiting`);
+    alertState.__ready = true;
+    if ($("#title").textContent === "Overview" && !document.hidden) refreshAlertBanner();
+  } catch { /* offline or signed out: the next poll tries again */ }
+}
+function alertBanner() {
+  const d = alertState;
+  if (!d.newCount && !d.waitingCount) return null;
+  const parts = [];
+  if (d.newCount) parts.push(h("strong", { text: `${d.newCount} new order${d.newCount === 1 ? "" : "s"}` }), " since you last looked. ");
+  if (d.waitingCount) parts.push(`${d.waitingCount} waiting to be processed. `);
+  return h("div", { class: "alert-banner", role: "status", id: "alertBanner" },
+    h("div", {}, ...parts, h("button", { class: "link", onclick: () => go("orders"), text: "Open orders" }),
+      h("div", { class: "muted", text: "These alerts show only while the dashboard is open. Email, WhatsApp and SMS alerts are not switched on yet." })),
+    d.newest.length ? h("ul", {}, d.newest.map((o) => h("li", {}, h("strong", { text: o.id }), ` ${naira(o.total)} · ${o.city} · ${when(o.date)}`))) : null);
+}
+function refreshAlertBanner() {
+  const old = $("#alertBanner"), fresh = alertBanner();
+  if (old && fresh) old.replaceWith(fresh); else if (old) old.remove(); else if (fresh) { const v = $("#view"); v.insertBefore(fresh, v.firstChild); }
+}
+setInterval(() => { if (!document.hidden && !$("#app").hidden) pollAlerts(); }, 45000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#app").hidden) pollAlerts(); });
 
 function pill(status) {
   const cls = /Deliver/.test(status) && !/Out/.test(status) ? "ok" : /Cancel/.test(status) ? "bad" : /Out|Prepar/.test(status) ? "warn" : "";
@@ -86,7 +125,9 @@ async function overview(root) {
   const max = Math.max(1, ...d.last7Days.map((x) => x.revenue));
   const chart = h("div", { class: "bar", role: "img", "aria-label": "Sales for the last 7 days" }, d.last7Days.map((x) =>
     h("div", {}, h("i", { style: `height:${Math.round((x.revenue / max) * 100)}%`, title: naira(x.revenue) }), h("b", { text: x.revenue ? naira(x.revenue) : "" }), h("span", { text: x.date.slice(5) }))));
+  await pollAlerts();
   root.replaceChildren(
+    alertBanner(),
     h("div", { class: "cards" },
       card("Total revenue", naira(d.revenue)), card("Today's sales", naira(d.todaySales)), card("Total orders", d.totalOrders),
       card("Pending orders", d.pendingOrders), card("Completed orders", d.completedOrders), card("Customers", d.customers), card("Products", d.products)),
@@ -99,13 +140,105 @@ async function overview(root) {
   );
 }
 
+
+// ---------- sales reports ----------
+const SVG = "http://www.w3.org/2000/svg";
+function svg(tag, attrs, ...kids) {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return e;
+}
+function revenueChart(series) {
+  const W = 720, H = 240, L = 54, R = 12, T = 14, B = 30, iw = W - L - R, ih = H - T - B;
+  const max = Math.max(1, ...series.map((x) => x.revenue));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const x = (i) => L + (series.length === 1 ? iw / 2 : (i * iw) / (series.length - 1));
+  const y = (v) => T + ih - (v / top) * ih;
+  const pts = series.map((d, i) => `${x(i).toFixed(1)},${y(d.revenue).toFixed(1)}`);
+  const el = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "linechart", role: "img", "aria-label": `Revenue per day from ${series[0].date} to ${series[series.length - 1].date}` });
+  for (let k = 0; k <= 4; k++) {
+    const v = (top / 4) * k, yy = y(v);
+    el.append(svg("line", { x1: L, x2: W - R, y1: yy, y2: yy, class: "grid" }), svg("text", { x: L - 8, y: yy + 4, class: "axis", "text-anchor": "end" }, v >= 1000 ? "₦" + Math.round(v / 1000) + "k" : "₦" + Math.round(v)));
+  }
+  const every = Math.max(1, Math.ceil(series.length / 8));
+  series.forEach((d, i) => { if (i % every === 0 || i === series.length - 1) el.append(svg("text", { x: x(i), y: H - 8, class: "axis", "text-anchor": "middle" }, d.date.slice(5))); });
+  el.append(svg("polygon", { points: `${L},${T + ih} ${pts.join(" ")} ${x(series.length - 1).toFixed(1)},${T + ih}`, class: "area" }), svg("polyline", { points: pts.join(" "), class: "line" }));
+  series.forEach((d, i) => el.append(svg("circle", { cx: x(i), cy: y(d.revenue), r: series.length > 40 ? 2 : 3.5, class: "dot" }, svg("title", {}, `${d.date}: ${naira(d.revenue)} from ${d.orders} order${d.orders === 1 ? "" : "s"}`))));
+  return el;
+}
+function ranked(title, rows, label, cols) {
+  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  return h("div", { class: "panel" }, h("h2", { text: title }), rows.length
+    ? h("div", { class: "rank" }, rows.map((r) => h("div", { class: "rank-row" },
+        h("div", { class: "rank-top" }, h("strong", { text: r[label] }), h("span", { text: naira(r.revenue) })),
+        h("div", { class: "rank-bar" }, h("i", { style: `width:${Math.max(3, Math.round((r.revenue / max) * 100))}%` })),
+        h("small", { class: "muted", text: cols(r) }))))
+    : h("p", { class: "muted", text: "Nothing sold in this period yet." }));
+}
+async function reports(root) {
+  let days = 30;
+  const body = h("div");
+  const load = async () => {
+    body.replaceChildren(h("div", { class: "loading", text: "Loading…" }));
+    const d = await api(`/reports?days=${days}`);
+    const card = (k, v, sub) => h("div", { class: "card" }, h("div", { class: "k", text: k }), h("div", { class: "v", text: v }), sub ? h("small", { class: "muted", text: sub }) : null);
+    body.replaceChildren(
+      h("div", { class: "cards" },
+        card("Revenue", naira(d.revenue), `${d.from} to ${d.to}`), card("Orders", d.orders, d.cancelled ? `${d.cancelled} cancelled` : "none cancelled"),
+        card("Average order", naira(d.averageOrder)), card("Items sold", d.itemsSold), card("Delivery fees", naira(d.deliveryFees)), card("Discounts given", naira(d.discountsGiven))),
+      h("div", { class: "panel" }, h("h2", { text: `Revenue per day, last ${d.days} days` }), d.orders ? revenueChart(d.series) : h("div", { class: "empty", text: "No paid or confirmed orders in this period yet. Cancelled orders and unpaid pay-ahead orders are not counted as sales." })),
+      h("div", { class: "two" },
+        ranked("Top products", d.topProducts, "name", (r) => `${r.units} unit${r.units === 1 ? "" : "s"} in ${r.orders} order${r.orders === 1 ? "" : "s"}`),
+        h("div", {}, ranked("By payment method", d.byPayment, "label", (r) => `${r.orders} order${r.orders === 1 ? "" : "s"}`), ranked("By delivery area", d.byArea, "label", (r) => `${r.orders} order${r.orders === 1 ? "" : "s"}`))));
+  };
+  const range = h("select", { "aria-label": "Report period", onchange: (e) => { days = Number(e.target.value); load().catch((err) => toast(err.message, true)); } },
+    [[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 90 days"]].map(([v, t]) => h("option", { value: v, text: t, selected: v === days })));
+  const exportBtn = h("a", { class: "btn", href: "/api/store/admin/orders.csv", download: "", text: "Export all orders (CSV)" });
+  const exportRange = h("a", { class: "btn", href: "#", text: "Export this period (CSV)", onclick: (e) => { e.preventDefault(); location.href = `/api/store/admin/orders.csv?days=${days}`; } });
+  root.replaceChildren(h("div", { class: "toolbar" }, range, h("span", { class: "grow" }), exportRange, exportBtn), body);
+  await load();
+}
+
+// ---------- customer reviews (moderation) ----------
+async function reviews(root) {
+  const d = await api("/reviews");
+  const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+  const list = d.reviews.map((r) => h("div", { class: "panel rev-admin" + (r.hidden ? " is-hidden" : "") },
+    h("div", { class: "rev-admin-top" }, h("strong", { text: r.product }), h("span", { class: "stars-text", text: stars(r.rating) }), h("span", { class: "muted", text: `${r.name} (${r.email})` }), h("span", { class: "muted", text: when(r.updated) }), r.hidden ? h("span", { class: "tag", text: "Hidden" }) : null),
+    r.body ? h("p", { text: r.body }) : h("p", { class: "muted", text: "(rating only, no written review)" }),
+    h("button", { class: "btn sm", type: "button", text: r.hidden ? "Show again" : "Hide", onclick: async (e) => {
+      e.target.disabled = true;
+      try { await api("/reviews/hide", { method: "POST", body: { email: r.email, productId: r.productId, hidden: !r.hidden } }); toast(r.hidden ? "Review is visible again" : "Review hidden"); reviews(root); }
+      catch (err) { toast(err.message, true); e.target.disabled = false; }
+    } })));
+  root.replaceChildren(
+    h("p", { class: "muted", text: "Only customers who received a product can review it, so these are all verified purchases. You can hide a review that breaks your rules; it is kept on record and you can show it again. Reviews cannot be edited by staff." }),
+    list.length ? h("div", {}, list) : h("div", { class: "empty", text: "No reviews yet. They appear here when a customer who received a product writes one." }));
+}
+
+// ---------- newsletter ----------
+async function newsletter(root) {
+  const d = await api("/subscribers");
+  const rows = d.subscribers.map((r) => h("tr", {}, h("td", { text: r.email }), h("td", { text: when(r.subscribed) })));
+  root.replaceChildren(
+    h("div", { class: "toolbar" }, h("strong", { text: `${d.count} subscriber${d.count === 1 ? "" : "s"}` }), h("span", { class: "grow" }),
+      h("a", { class: "btn", href: "/api/store/admin/subscribers.csv", download: "", text: "Export (CSV)" })),
+    h("div", { class: "panel" }, h("p", { class: "muted", text: "These are people who asked, on the shop footer, to hear about offers. Nothing is sent from this site yet: sending a newsletter needs an email service to be connected. Each person can unsubscribe with their own link." })),
+    d.count ? h("div", { class: "panel tablewrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Email" }), h("th", { text: "Subscribed" }))), h("tbody", {}, rows)))
+            : h("div", { class: "panel empty", text: "No subscribers yet. The signup box is in the shop footer." }));
+}
+
 // ---------- orders ----------
 async function orders(root) {
   let q = "", status = "";
+  await pollAlerts();
+  const freshIds = new Set(alertState.newIds);
   const list = h("div");
   const load = async () => {
     const d = await api(`/orders?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`);
-    list.replaceChildren(table(["Order", "Customer", "Items", "Total", "Status", "Action"], d.orders.map((o) => orderRow(o, load)), "No orders match."));
+    list.replaceChildren(table(["Order", "Customer", "Items", "Total", "Status", "Action"], d.orders.map((o) => { const r = orderRow(o, load); if (freshIds.has(o.id)) r.classList.add("fresh"); return r; }), "No orders match."));
     return d;
   };
   const first = await api("/orders");
@@ -113,6 +246,8 @@ async function orders(root) {
   const search = h("input", { type: "search", placeholder: "Search order, phone or email", "aria-label": "Search orders", oninput: (e) => { q = e.target.value; clearTimeout(search._t); search._t = setTimeout(load, 250); } });
   root.replaceChildren(h("div", { class: "tools" }, search, sel), list);
   await load();
+  // The rows are on screen with the new ones highlighted, so they now count as seen.
+  if (freshIds.size) { try { await api("/alerts/seen", { method: "POST" }); await pollAlerts(); } catch { /* try again next visit */ } }
 }
 function orderRow(o, reload) {
   const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Ready for dispatch", "Cancelled"], "Ready for dispatch": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
@@ -179,7 +314,7 @@ async function products(root) {
 
 function editor(p, done) {
   const isNew = !p;
-  const f = { id: p?.id || "", name: p?.name || "", cat: p?.cat || "", emoji: p?.emoji || "", description: p?.description || "", image: p?.image || "", stock: p?.stock ?? "", active: p ? p.active : true, featured: p?.featured || false };
+  const f = { id: p?.id || "", name: p?.name || "", cat: p?.cat || "", sub: p?.sub || "", brand: p?.brand || "", emoji: p?.emoji || "", description: p?.description || "", image: p?.image || "", stock: p?.stock ?? "", active: p ? p.active : true, featured: p?.featured || false };
   const opts = (p?.options || [{ label: "", price: "" }]).map((o, i) => ({ label: o.label, price: o.price, was: p?.comparePrices?.[i] || "" }));
   const optBox = h("div");
   const drawOpts = () => optBox.replaceChildren(...opts.map((o, i) => h("div", { class: "optrow" },
@@ -220,6 +355,7 @@ function editor(p, done) {
     isNew ? field("Product code (letters, numbers, - and _)", bind("id", { required: true, maxlength: "40" })) : null,
     field("Name", bind("name", { required: true, maxlength: "80" })),
     h("div", { class: "row2" }, field("Category", bind("cat", { required: true, maxlength: "40", list: "cats" })), field("Emoji (optional)", bind("emoji", { maxlength: "8" }))),
+    h("div", { class: "row2" }, field("Type / subcategory (optional)", bind("sub", { maxlength: "40", list: "subs", placeholder: "e.g. Rice and grains" })), field("Brand (optional)", bind("brand", { maxlength: "40", list: "brands", placeholder: "Leave empty if unbranded" }))),
     field("Description", h("textarea", { maxlength: "600", oninput: (e) => (f.description = e.target.value), text: f.description })),
     h("div", {}, h("label", { text: "Product photo" }), photoBox),
     h("div", {}, h("label", { text: "Sizes and prices (old price is optional and shows a discount)" }), optBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (opts.length < 12) { opts.push({ label: "", price: "", was: "" }); drawOpts(); } }, text: "+ Add size" })),
@@ -234,11 +370,14 @@ function editor(p, done) {
         try { const r = await api(`/products/${encodeURIComponent(p.id)}`, { method: "DELETE" }); toast(r.hidden ? "Hidden (it has past orders)" : "Product removed"); close(); done(); } catch (err) { msg.textContent = err.message; }
       }, text: "Remove" })));
   const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": isNew ? "Add product" : "Edit product" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: isNew ? "Add product" : "Edit " + p.name }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
-  const dl = h("datalist", { id: "cats" });
-  api("/products").then((d) => { for (const c of new Set(d.products.map((x) => x.cat))) dl.append(h("option", { value: c })); }).catch(() => {});
+  const dl = h("datalist", { id: "cats" }), dlSubs = h("datalist", { id: "subs" }), dlBrands = h("datalist", { id: "brands" });
+  api("/products").then((d) => {
+    const fill = (list, key) => { for (const v of new Set(d.products.map((x) => x[key]).filter(Boolean))) list.append(h("option", { value: v })); };
+    fill(dl, "cat"); fill(dlSubs, "sub"); fill(dlBrands, "brand");
+  }).catch(() => {});
   const onKey = (e) => { if (e.key === "Escape") close(); };
-  function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); }
-  document.addEventListener("keydown", onKey); document.body.append(dl, modal);
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); dl.remove(); dlSubs.remove(); dlBrands.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(dl, dlSubs, dlBrands, modal);
   (isNew ? form.querySelector("input") : form.querySelector("input")).focus();
 }
 
@@ -321,29 +460,34 @@ async function settings(root) {
   const s = await api("/settings");
   const msg = h("p", { class: "msg", role: "alert" });
   const inp = (id, label, val, extra = {}) => h("div", {}, h("label", { for: id, text: label }), h("input", { id, value: val, ...extra }));
-  const areas = s.areas.map((a) => ({ name: a.name, fee: a.fee }));
+  const areas = s.areas.map((a) => ({ name: a.name, fee: a.fee, eta: a.eta || "" }));
   const areaBox = h("div");
-  const drawAreas = () => areaBox.replaceChildren(...areas.map((a, i) => h("div", { class: "optrow", style: "grid-template-columns:2fr 1fr auto" },
+  const drawAreas = () => areaBox.replaceChildren(...areas.map((a, i) => h("div", { class: "optrow", style: "grid-template-columns:2fr 1fr 1.4fr auto" },
     h("input", { value: a.name, placeholder: "Area name", "aria-label": "Area name", oninput: (e) => (a.name = e.target.value) }),
     h("input", { type: "number", min: "0", max: "100000", value: a.fee, placeholder: "Fee ₦", "aria-label": "Delivery fee in naira", oninput: (e) => (a.fee = e.target.value) }),
+    h("input", { value: a.eta, maxlength: "40", placeholder: "Time, e.g. 1-2 hours (optional)", "aria-label": "Estimated delivery time", oninput: (e) => (a.eta = e.target.value) }),
     h("button", { type: "button", class: "btn sm danger", "aria-label": "Remove area", onclick: () => { if (areas.length > 1) { areas.splice(i, 1); drawAreas(); } }, text: "✕" }))));
   drawAreas();
   const form = h("form", { class: "form panel", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
     const body = { storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value,
-      areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee) })),
+      social: Object.fromEntries(Object.keys(s.socialNetworks).map((k) => [k, $("#soc_" + k).value])),
+      areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee), eta: a.eta })),
       bank: { bank: $("#sBank").value, accountName: $("#sAcctName").value, accountNumber: $("#sAcctNo").value } };
     try { await api("/settings", { method: "PUT", body }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
   } },
     h("h2", { text: "Delivery areas and fees" }),
     h("p", { class: "muted", text: "Customers choose one of these at checkout, and the fee is looked up on the server. The first area is the default." }),
-    areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "" }); drawAreas(); } }, text: "+ Add area" }),
+    areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "", eta: "" }); drawAreas(); } }, text: "+ Add area" }),
     h("h2", { style: "margin-top:18px", text: "Bank account for pay-before-delivery" }),
     h("p", { class: "muted", text: s.bank.ready ? "Customers can pay by bank transfer to this account." : "Pay-before-delivery is OFF until you enter your real account. Nothing is shown to customers until all three fields are filled." }),
     inp("sBank", "Bank", s.bank.bank, { maxlength: "60" }), inp("sAcctName", "Account name", s.bank.accountName, { maxlength: "80" }), inp("sAcctNo", "Account number (10 digits)", s.bank.accountNumber, { inputmode: "numeric", maxlength: "13" }),
     h("h2", { style: "margin-top:18px", text: "Store details" }),
     inp("sName", "Store name", s.storeName, { maxlength: "80" }), inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
     inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }), inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),
+    h("h2", { style: "margin-top:18px", text: "Social media links" }),
+    h("p", { class: "muted", text: "Shown in the shop footer only when filled in. Paste the full address of your page. Leave blank to hide." }),
+    ...Object.entries(s.socialNetworks).map(([k, label]) => inp("soc_" + k, label, (s.social || {})[k] || "", { placeholder: "https://", maxlength: "200" })),
     msg, h("button", { class: "btn primary", type: "submit", text: "Save settings" }),
     h("p", { class: "muted", text: "Online payment (Paystack) and SMS or WhatsApp notifications stay off until you supply real accounts and keys." }));
   root.replaceChildren(form);

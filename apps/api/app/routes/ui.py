@@ -13,9 +13,10 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .. import auth, catalogue, config, db, order_status, ratelimit
+from .. import auth, catalogue, config, db, order_status, ratelimit, social
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
+from .reviews import bought_and_received, public, summarise
 
 router = APIRouter()
 
@@ -27,6 +28,15 @@ def _first_name(user: dict | None) -> str:
 def _render(request: Request, name: str, status: int = 200, **ctx) -> HTMLResponse:
     ctx.setdefault("user", auth.current_user(request))
     return templates.TemplateResponse(request, name, ctx, status_code=status)
+
+
+async def rating_map() -> dict[str, dict]:
+    """{product id: {"average", "count"}} from visible reviews. Products without reviews are absent,
+    so a card shows stars only when real customers have rated it."""
+    by_product: dict[str, list[dict]] = {}
+    for r in await db.list_reviews():
+        by_product.setdefault(r["productId"], []).append(r)
+    return {pid: summarise(rows) for pid, rows in by_product.items()}
 
 
 def _trigger(resp: Response, event: str, detail: dict | None = None) -> Response:
@@ -49,6 +59,13 @@ CATEGORY_EMOJI = {
     "Bakery": "🍞",
     "Beauty & Personal Care": "🧼",
 }
+
+
+async def _testimonials() -> list[dict]:
+    """Real written reviews only. Empty means the home page shows no testimonials section at all."""
+    rows = [r for r in await db.list_reviews() if r["body"]][:6]
+    names = {p["id"]: p["name"] for p in await catalogue.all_products()}
+    return [{**public(r), "product": names.get(r["productId"], "")} for r in rows]
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -96,6 +113,8 @@ async def home(request: Request):
         categories=["All", *await catalogue.categories()],
         active="All",
         category_cards=cards,
+        ratings=await rating_map(),
+        testimonials=await _testimonials(),
         product_total=len(products),
         hero_picks=hero_picks,
         shelves=shelves,
@@ -104,6 +123,7 @@ async def home(request: Request):
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
         contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
             await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
             "Hello! I have a question about my order.",
@@ -134,12 +154,25 @@ async def product_grid(
     min: str = "",
     max: str = "",
     favs: str = "",
+    sub: str = "",
+    brand: str = "",
 ):
     categories = ["All", *await catalogue.categories()]
+    everything = await db.list_products()
+    sub_map = catalogue.subcategories(everything)
+    brand_list = catalogue.brands(everything)
+    active_cat = cat if cat in categories else "All"
+    # Only real values are honoured; anything else is ignored rather than showing an empty page.
+    if sub not in sub_map.get(active_cat, []):
+        sub = ""
+    if brand not in brand_list:
+        brand = ""
     user = auth.current_user(request)
     fav_ids = await db.get_favourites(user["email"]) if user else []
     items = await catalogue.shelf(
-        cat=cat if cat in categories else "All",
+        cat=active_cat,
+        sub=sub,
+        brand=brand,
         q=q,
         sort=sort,
         section=section if section in ("best", "new", "offers", "featured") else "",
@@ -160,9 +193,14 @@ async def product_grid(
         "partials/products.html",
         products=items,
         categories=categories,
-        active=cat if cat in categories else "All",
+        active=active_cat,
+        subs=sub_map.get(active_cat, []),
+        active_sub=sub,
+        brands=brand_list,
+        active_brand=brand,
         heading=heading,
         fav_ids=fav_ids,
+        ratings=await rating_map(),
         discount=catalogue.discount_percent,
         favs_only=favs == "1",
     )
@@ -191,7 +229,17 @@ async def media(image_id: str):
 async def account_page(request: Request):
     if not auth.current_user(request):
         return RedirectResponse("/?signin=1", status_code=303)
-    return _render(request, "account.html", areas=await catalogue.delivery_areas())
+    return _render(
+        request,
+        "account.html",
+        areas=await catalogue.delivery_areas(),
+        contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
+        whatsapp=whatsapp_link(
+            await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
+            "Hello! I have a question about my order.",
+        ),
+    )
 
 
 @router.get("/product/{product_id}", response_class=HTMLResponse)
@@ -201,10 +249,20 @@ async def product_page(request: Request, product_id: str):
         return _render(request, "product_missing.html", status=404)
     user = auth.current_user(request)
     fav_ids = await db.get_favourites(user["email"]) if user else []
+    visible = await db.list_reviews(p["id"])
+    mine = await db.get_review(user["email"], p["id"]) if user else None
+    can_review = (
+        bought_and_received(await db.get_orders_for_user(user["email"]), p["id"]) if user else False
+    )
     return _render(
         request,
         "product.html",
         p=p,
+        review_summary=summarise(visible),
+        reviews=[public(r) for r in visible[:50]],
+        my_review=mine,
+        can_review=can_review,
+        user_signed_in=bool(user),
         related=await catalogue.related(p),
         discount=catalogue.discount_percent,
         in_stock=catalogue.in_stock(p),
@@ -215,6 +273,7 @@ async def product_page(request: Request, product_id: str):
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
         contact_phone=await db.get_setting("contact_phone", ""),
+        social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
             config.WHATSAPP_NUMBER, f"Hello! I have a question about {p['name']}."
         ),
@@ -245,6 +304,34 @@ async def toggle_favourite(request: Request, product_id: str):
 @router.get("/ui/header", response_class=HTMLResponse)
 async def header_account(request: Request):
     return _render(request, "partials/account.html")
+
+
+async def _password_page(request: Request, mode: str, token: str = "") -> HTMLResponse:
+    r = _render(
+        request,
+        "password.html",
+        mode=mode,
+        token=token,
+        contact_phone=await db.get_setting("contact_phone", ""),
+        whatsapp=whatsapp_link(
+            await db.get_setting("whatsapp", "") or config.WHATSAPP_NUMBER,
+            "Hello! I need help getting back into my account.",
+        ),
+    )
+    # A reset link holds a secret: never cache it and never send it on as a referrer.
+    r.headers["Cache-Control"] = "no-store"
+    r.headers["Referrer-Policy"] = "no-referrer"
+    return r
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_page(request: Request):
+    return await _password_page(request, "forgot")
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+async def reset_page(request: Request, token: str = ""):
+    return await _password_page(request, "reset", token[:200])
 
 
 @router.get("/ui/signin", response_class=HTMLResponse)
