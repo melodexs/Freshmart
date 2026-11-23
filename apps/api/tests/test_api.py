@@ -254,7 +254,12 @@ def test_csp_forbids_inline_and_foreign_scripts(client):
 
 
 def test_static_is_cacheable_but_pages_and_api_are_not(client):
-    assert "max-age=86400" in client.get("/static/styles.css").headers["cache-control"]
+    # Code files must be re-checked on every visit so a deploy shows up at once...
+    for code in ("/static/styles.css", "/static/premium.css"):
+        r = client.get(code)
+        assert r.headers["cache-control"] == "no-cache" and r.headers.get("etag")
+    # ...while fonts and images keep the one-day cache.
+    assert "max-age=86400" in client.get("/static/favicon.svg").headers["cache-control"]
     assert client.get("/").headers["cache-control"] == "no-store"
     assert client.get("/api/health").headers["cache-control"] == "no-store"
 
