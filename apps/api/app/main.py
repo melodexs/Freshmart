@@ -127,10 +127,16 @@ async def security_headers(request: Request, call_next):
     )
     resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
     resp.headers.setdefault("Content-Security-Policy", CSP)
-    # Static files change rarely: let browsers reuse them for a day, but always
-    # revalidate so a new deploy is picked up. Pages and API are never cached.
-    if request.url.path.startswith("/static/"):
-        resp.headers.setdefault("Cache-Control", "public, max-age=86400, must-revalidate")
+    # Code files (CSS/JS, including the admin) change with every deploy, so the
+    # browser must ask the server each time; the ETag makes that check cheap and a
+    # fix shows up straight away. Fonts, images and vendor files rarely change and
+    # keep a one-day cache. Pages and API are never cached.
+    path = request.url.path
+    if path.startswith("/static/"):
+        if path.endswith((".css", ".js")):
+            resp.headers.setdefault("Cache-Control", "no-cache")
+        else:
+            resp.headers.setdefault("Cache-Control", "public, max-age=86400, must-revalidate")
     else:
         resp.headers.setdefault("Cache-Control", "no-store")
     return resp
