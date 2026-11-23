@@ -88,7 +88,7 @@ h1,h2,h3,.logo{font-family:var(--serif); font-weight:500; letter-spacing:-.01em;
 .marquee i{width:6px; height:6px; border-radius:50%; background:var(--gold); opacity:.8; display:inline-block;}
 
 /* ---------- lower sections ---------- */
-.info-strip{margin-top:-34px; position:relative; z-index:3;}
+.info-strip{margin-top:22px; position:relative; z-index:3;}
 .info-item{background:var(--paper); border:1px solid rgba(15,46,33,.08); box-shadow:0 18px 40px -22px rgba(15,46,33,.45); transition:transform .3s var(--ease), box-shadow .3s var(--ease);}
 .info-item:hover{transform:translateY(-4px); box-shadow:0 26px 48px -22px rgba(15,46,33,.55);}
 .info-item strong{font-family:var(--serif); font-weight:500; font-size:1.05rem;}
@@ -139,7 +139,7 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
   .hero-facts{margin-top:22px; padding-top:16px; gap:22px;}
   .hero-cta .hero-btn{flex:1 1 auto;}
   .scroll-cue{display:none;}
-  .info-strip{margin-top:-26px;}
+  .info-strip{margin-top:16px;}
 }
 @media (max-width:380px){ .hero h1{font-size:2rem;} .float-card{width:min(100%,108px);} }
 
