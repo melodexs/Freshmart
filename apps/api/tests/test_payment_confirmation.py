@@ -71,7 +71,7 @@ def test_confirming_marks_it_paid_and_records_who_how_and_when(admin):
     d = o["paymentDetail"]
     assert d["paid"] is True and d["paidAmount"] == 4600 and d["paidMethod"] == "bank transfer"
     assert d["paidReference"] == "TRF-998877" and d["paidAt"].endswith("Z")
-    assert d["confirmedBy"] == "admin"
+    assert d["confirmedBy"] == "Shared staff key"
 
 
 def test_every_confirmation_is_written_to_the_audit_log(admin):
@@ -79,7 +79,7 @@ def test_every_confirmation_is_written_to_the_audit_log(admin):
     confirm(admin, oid)
     entries = admin.get(f"/api/store/admin/audit?subject={oid}", headers=STAFF).json()["entries"]
     e = next(x for x in entries if x["action"] == "payment_confirmed")
-    assert e["subject"] == oid and e["actor"] == "admin" and e["at"].endswith("Z")
+    assert e["subject"] == oid and e["actor"] == "Shared staff key" and e["at"].endswith("Z")
     assert e["detail"] == {
         "amount": 4600,
         "method": "bank transfer",

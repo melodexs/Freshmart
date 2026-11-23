@@ -158,6 +158,9 @@ async def hide_review(request: Request):
     if not await db.set_review_hidden(email, pid, hidden):
         return err(404, "Review not found.")
     await db.add_audit(
-        "admin", "review_hidden" if hidden else "review_shown", pid, {"customer": email}
+        auth.actor_name(request),
+        "review_hidden" if hidden else "review_shown",
+        pid,
+        {"customer": email},
     )
     return {"ok": True}

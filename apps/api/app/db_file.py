@@ -30,6 +30,7 @@ EMPTY = {
     "stockMoves": [],
     "discounts": {},
     "discountUses": [],
+    "admins": {},
 }
 
 
@@ -550,3 +551,58 @@ async def use_reset_token(token_hash: str, now: float) -> str | None:
 async def peek_reset_token(token_hash: str, now: float) -> bool:
     with _lock:
         return any(t["hash"] == token_hash and t["expires"] > now for t in _read()["reset_tokens"])
+
+
+# ---------- named admin accounts ----------
+
+
+async def get_admin(email: str):
+    with _lock:
+        a = _read().get("admins", {}).get(email)
+    return dict(a) if a else None
+
+
+async def list_admins() -> list[dict]:
+    with _lock:
+        rows = [dict(a) for a in _read().get("admins", {}).values()]
+    return sorted(rows, key=lambda a: (a["role"] != "owner", a["created"]))
+
+
+async def create_admin(a: dict) -> bool:
+    """Insert only if the email is free. Returns False if it already exists."""
+    from datetime import UTC, datetime
+
+    with _lock:
+        data = _read()
+        admins = data.setdefault("admins", {})
+        if a["email"] in admins:
+            return False
+        admins[a["email"]] = {
+            "email": a["email"],
+            "name": a["name"],
+            "phone": a["phone"],
+            "passHash": a["passHash"],
+            "role": a["role"],
+            "mustChange": a.get("mustChange", True),
+            "active": True,
+            "created": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "lastLogin": "",
+            "fails": 0,
+            "lockedUntil": 0,
+            "createdBy": a.get("createdBy", ""),
+        }
+        _write(data)
+        return True
+
+
+async def update_admin(email: str, **fields) -> None:
+    from datetime import UTC, datetime
+
+    with _lock:
+        data = _read()
+        a = data.setdefault("admins", {}).get(email)
+        if a is None:
+            return
+        for k, v in fields.items():
+            a[k] = datetime.now(UTC).isoformat().replace("+00:00", "Z") if k == "lastLogin" else v
+        _write(data)

@@ -86,19 +86,19 @@ def check_staff_key(supplied: str) -> bool:
     return hmac.compare_digest(supplied.encode(), key.encode())
 
 
-def sign_staff_token() -> str:
+def sign_staff_token(admin: dict | None = None) -> str:
+    """A staff session. With no admin it is the shared-key session (level 'staff', no name)."""
     now = int(time.time())
-    return jwt.encode(
-        {"role": "staff", "iat": now, "exp": now + STAFF_TTL_SECONDS},
-        config.JWT_SECRET,
-        algorithm="HS256",
-    )
+    claims = {"role": "staff", "iat": now, "exp": now + STAFF_TTL_SECONDS}
+    if admin:
+        claims.update({"level": admin["role"], "email": admin["email"], "name": admin["name"]})
+    return jwt.encode(claims, config.JWT_SECRET, algorithm="HS256")
 
 
-def set_staff_cookie(response: Response) -> None:
+def set_staff_cookie(response: Response, admin: dict | None = None) -> None:
     response.set_cookie(
         STAFF_COOKIE,
-        sign_staff_token(),
+        sign_staff_token(admin),
         max_age=STAFF_TTL_SECONDS,
         httponly=True,
         samesite="strict",
@@ -124,6 +124,41 @@ def is_staff(request: Request) -> bool:
         return jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"]).get("role") == "staff"
     except jwt.PyJWTError:
         return False
+
+
+def staff_identity(request: Request) -> dict:
+    """Who is acting: {'name', 'email', 'level'}. The shared key has no person behind it."""
+    if check_staff_key(request.headers.get("x-staff-key", "")) and config.STORE_STAFF_KEY:
+        return {"name": "Shared staff key", "email": "", "level": "staff"}
+    token = request.cookies.get(STAFF_COOKIE)
+    if token:
+        try:
+            c = jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"])
+        except jwt.PyJWTError:
+            c = {}
+        if c.get("role") == "staff":
+            return {
+                "name": c.get("name") or "Shared staff key",
+                "email": c.get("email", ""),
+                "level": c.get("level", "staff"),
+            }
+    if not config.STORE_STAFF_KEY and not config.IS_PRODUCTION:
+        return {"name": "Local development", "email": "", "level": "owner"}
+    return {"name": "Shared staff key", "email": "", "level": "staff"}
+
+
+def actor_name(request: Request) -> str:
+    """The name to put in the audit log for whoever is acting."""
+    return staff_identity(request)["name"]
+
+
+def require_owner(request: Request) -> dict:
+    """Only a named owner account may pass (never the shared key)."""
+    require_staff(request)
+    who = staff_identity(request)
+    if who["level"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the store owner can do that.")
+    return who
 
 
 def require_staff(request: Request) -> None:

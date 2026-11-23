@@ -45,6 +45,11 @@ PORT = int(os.environ.get("PORT", "4000"))
 
 # Optional: the store's WhatsApp number. When set (and valid) the shop shows a chat button.
 WHATSAPP_NUMBER = os.environ.get("WHATSAPP_NUMBER", "").strip()
+# One-time first owner (used only when no owner exists yet; remove these once the owner has signed in).
+FIRST_OWNER_NAME = os.environ.get("FIRST_OWNER_NAME", "").strip()
+FIRST_OWNER_EMAIL = os.environ.get("FIRST_OWNER_EMAIL", "").strip()
+FIRST_OWNER_PHONE = os.environ.get("FIRST_OWNER_PHONE", "").strip()
+FIRST_OWNER_PASSWORD = os.environ.get("FIRST_OWNER_PASSWORD", "")
 
 # Hosted Postgres needs SSL. Set PGSSLMODE=disable only for a local, non-SSL database.
 PG_SSL = False if os.environ.get("PGSSLMODE", "").lower() == "disable" else "require"

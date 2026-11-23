@@ -126,7 +126,9 @@ async def create_product(request: Request):
         return err(409, "A product with that code already exists.")
     await db.save_product(p)
     if p["stock"]:
-        await catalogue.log_stock(p["id"], p["stock"], p["stock"], "New product added", "admin")
+        await catalogue.log_stock(
+            p["id"], p["stock"], p["stock"], "New product added", auth.actor_name(request)
+        )
     return {"product": p}
 
 
@@ -143,7 +145,7 @@ async def update_product(product_id: str, request: Request):
         was = existing.get("stock")
         change = p["stock"] if was is None else p["stock"] - was
         reason = "Stock tracking started" if was is None else "Stock edited by admin"
-        await catalogue.log_stock(product_id, change, p["stock"], reason, "admin")
+        await catalogue.log_stock(product_id, change, p["stock"], reason, auth.actor_name(request))
     return {"product": p}
 
 
@@ -175,9 +177,13 @@ async def set_stock(product_id: str, request: Request):
     p["stock"] = n
     await db.save_product(p)
     if before is None:
-        await catalogue.log_stock(product_id, n, n, "Stock tracking started", "admin")
+        await catalogue.log_stock(
+            product_id, n, n, "Stock tracking started", auth.actor_name(request)
+        )
     else:
-        await catalogue.log_stock(product_id, n - before, n, "Stock corrected by admin", "admin")
+        await catalogue.log_stock(
+            product_id, n - before, n, "Stock corrected by admin", auth.actor_name(request)
+        )
     return {"product": p}
 
 
@@ -237,7 +243,9 @@ async def put_settings(request: Request):
             eta = clean_text(a.get("eta"), 40)
             areas.append({"name": name, "fee": fee, "eta": eta})
         await db.set_setting("delivery_areas", areas)
-        await db.add_audit("admin", "delivery_areas_changed", "settings", {"areas": areas})
+        await db.add_audit(
+            auth.actor_name(request), "delivery_areas_changed", "settings", {"areas": areas}
+        )
     if "bank" in b:
         raw = b["bank"] if isinstance(b["bank"], dict) else {}
         bank = clean_text(raw.get("bank"), 60)
@@ -253,7 +261,7 @@ async def put_settings(request: Request):
             "bank_details", {"bank": bank, "accountName": name, "accountNumber": number}
         )
         await db.add_audit(
-            "admin",
+            auth.actor_name(request),
             "bank_details_changed",
             "settings",
             {"bank": bank, "accountNumberEnding": number[-4:]},
@@ -273,7 +281,12 @@ async def put_settings(request: Request):
             links[net] = url
         current = await db.get_setting("social", {}) or {}
         await db.set_setting("social", {**current, **links})
-        await db.add_audit("admin", "social_links_changed", "settings", {"networks": sorted(links)})
+        await db.add_audit(
+            auth.actor_name(request),
+            "social_links_changed",
+            "settings",
+            {"networks": sorted(links)},
+        )
     for key, setting in (("whatsapp", "whatsapp"), ("contactPhone", "contact_phone")):
         if key in b:
             from ..phone import normalise
@@ -369,10 +382,12 @@ async def set_order_status(order_id: str, request: Request):
     ok = await db.update_order_status(order_id, new, allowed_from=[o["status"]])
     if not ok:
         return err(409, "That order was just changed by someone else. Please refresh.")
-    await db.add_audit("admin", "status_changed", order_id, {"from": o["status"], "to": new})
+    await db.add_audit(
+        auth.actor_name(request), "status_changed", order_id, {"from": o["status"], "to": new}
+    )
     if new == order_status.CANCELLED:
         await catalogue.restock_order(
-            o, "Order cancelled by admin", "admin"
+            o, "Order cancelled by admin", auth.actor_name(request)
         )  # gives the reserved stock back
     return {"order": await db.get_order(order_id)}
 
@@ -415,7 +430,7 @@ async def confirm_payment(order_id: str, request: Request):
         "paidMethod": method,
         "paidReference": reference,
         "paidAt": now,
-        "confirmedBy": "admin",
+        "confirmedBy": auth.actor_name(request),
     }
     ok = await db.confirm_payment(
         order_id, order_status.AWAITING_PAYMENT, order_status.PAID, record
@@ -423,7 +438,7 @@ async def confirm_payment(order_id: str, request: Request):
     if not ok:
         return err(409, "That order was just changed by someone else. Please refresh.")
     await db.add_audit(
-        "admin",
+        auth.actor_name(request),
         "payment_confirmed",
         order_id,
         {"amount": amount, "method": method, "reference": reference, "orderTotal": o["total"]},
@@ -464,7 +479,7 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
         return JSONResponse({"error": str(exc)}, status_code=400)
     image_id = images.new_id()
     await db.save_image(image_id, data)
-    await db.add_audit("admin", "image_uploaded", image_id, {"bytes": len(data)})
+    await db.add_audit(auth.actor_name(request), "image_uploaded", image_id, {"bytes": len(data)})
     return {"url": f"/media/{image_id}", "bytes": len(data)}
 
 
@@ -485,6 +500,9 @@ async def save_discount_code(request: Request):
     existing = await db.get_discount(rule["code"])
     await db.save_discount(rule)
     await db.add_audit(
-        "admin", "discount_changed" if existing else "discount_created", rule["code"], rule
+        auth.actor_name(request),
+        "discount_changed" if existing else "discount_created",
+        rule["code"],
+        rule,
     )
     return {"code": rule}

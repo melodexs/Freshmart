@@ -99,6 +99,13 @@ async def init() -> None:
             CREATE TABLE IF NOT EXISTS subscribers (
               email TEXT PRIMARY KEY, subscribed TIMESTAMPTZ NOT NULL DEFAULT now(),
               unsubscribed BOOLEAN NOT NULL DEFAULT FALSE);
+            CREATE TABLE IF NOT EXISTS admins (
+              email TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
+              pass_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'staff',
+              must_change BOOLEAN NOT NULL DEFAULT TRUE, active BOOLEAN NOT NULL DEFAULT TRUE,
+              created TIMESTAMPTZ NOT NULL DEFAULT now(), last_login TIMESTAMPTZ,
+              fails INTEGER NOT NULL DEFAULT 0, locked_until DOUBLE PRECISION NOT NULL DEFAULT 0,
+              created_by TEXT NOT NULL DEFAULT '');
             CREATE TABLE IF NOT EXISTS audit_log (
               id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(),
               actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
@@ -762,3 +769,79 @@ async def peek_reset_token(token_hash: str, now: float) -> bool:
                 "SELECT 1 FROM reset_tokens WHERE hash = $1 AND expires > $2", token_hash, now
             )
         )
+
+
+# ---------- named admin accounts ----------
+
+
+def _admin(r):
+    if r is None:
+        return None
+    return {
+        "email": r["email"],
+        "name": r["name"],
+        "phone": r["phone"],
+        "passHash": r["pass_hash"],
+        "role": r["role"],
+        "mustChange": r["must_change"],
+        "active": r["active"],
+        "created": _iso(r["created"]),
+        "lastLogin": _iso(r["last_login"]) if r["last_login"] else "",
+        "fails": r["fails"],
+        "lockedUntil": r["locked_until"],
+        "createdBy": r["created_by"],
+    }
+
+
+async def get_admin(email: str):
+    async with _pool.acquire() as c:
+        return _admin(await c.fetchrow("SELECT * FROM admins WHERE email=$1", email))
+
+
+async def list_admins() -> list[dict]:
+    async with _pool.acquire() as c:
+        rows = await c.fetch("SELECT * FROM admins ORDER BY (role='owner') DESC, created")
+    return [_admin(r) for r in rows]
+
+
+async def create_admin(a: dict) -> bool:
+    """Insert only if the email is free. Returns False if it already exists."""
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """INSERT INTO admins (email,name,phone,pass_hash,role,must_change,created_by)
+               VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (email) DO NOTHING""",
+            a["email"],
+            a["name"],
+            a["phone"],
+            a["passHash"],
+            a["role"],
+            a.get("mustChange", True),
+            a.get("createdBy", ""),
+        )
+    return res.endswith("1")
+
+
+_ADMIN_COLS = {
+    "name": "name",
+    "phone": "phone",
+    "passHash": "pass_hash",
+    "role": "role",
+    "mustChange": "must_change",
+    "active": "active",
+    "fails": "fails",
+    "lockedUntil": "locked_until",
+}
+
+
+async def update_admin(email: str, **fields) -> None:
+    sets, vals = [], []
+    for k, v in fields.items():
+        if k == "lastLogin":
+            sets.append("last_login = now()")
+            continue
+        sets.append(f"{_ADMIN_COLS[k]} = ${len(vals) + 2}")
+        vals.append(v)
+    if not sets:
+        return
+    async with _pool.acquire() as c:
+        await c.execute(f"UPDATE admins SET {', '.join(sets)} WHERE email = $1", email, *vals)

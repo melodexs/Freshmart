@@ -17,6 +17,10 @@ else:
 init = _impl.init
 get_user_by_email = _impl.get_user_by_email
 save_user = _impl.save_user
+get_admin = _impl.get_admin
+list_admins = _impl.list_admins
+create_admin = _impl.create_admin
+update_admin = _impl.update_admin
 create_user = _impl.create_user
 get_orders_for_user = _impl.get_orders_for_user
 add_order = _impl.add_order

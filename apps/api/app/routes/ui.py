@@ -512,7 +512,12 @@ async def staff_set_status(request: Request, order_id: str, status: str = Form("
         return await _store_feed(
             request, ("error", f"Order {order_id} was just changed. Please review it again.")
         )
-    await db.add_audit("admin", "status_changed", order_id, {"from": order["status"], "to": status})
+    await db.add_audit(
+        auth.actor_name(request),
+        "status_changed",
+        order_id,
+        {"from": order["status"], "to": status},
+    )
     if status == order_status.CANCELLED:
         await catalogue.restock_order(order)
     note = order_status.refund_note(order) if status == order_status.CANCELLED else None

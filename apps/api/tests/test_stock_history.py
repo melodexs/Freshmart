@@ -87,7 +87,11 @@ def test_admin_cancel_is_recorded_as_admin(shop):
         f"/api/store/admin/orders/{o['id']}/status", json={"status": "Cancelled"}, headers=STAFF
     )
     m = moves(shop)[0]
-    assert (m["change"], m["reason"], m["actor"]) == (2, "Order cancelled by admin", "admin")
+    assert (m["change"], m["reason"], m["actor"]) == (
+        2,
+        "Order cancelled by admin",
+        "Shared staff key",
+    )
 
 
 def test_admin_correction_records_the_difference(shop):
@@ -98,7 +102,7 @@ def test_admin_correction_records_the_difference(shop):
         -4,
         6,
         "Stock corrected by admin",
-        "admin",
+        "Shared staff key",
     )
 
 

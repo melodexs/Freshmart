@@ -89,7 +89,7 @@ def _cell(v: str) -> str:
 
 
 @staff_router.get("/subscribers.csv")
-async def subscribers_csv():
+async def subscribers_csv(request: Request):
     import csv
     import io
 
@@ -99,7 +99,9 @@ async def subscribers_csv():
     rows = await db.list_subscribers()
     for r in rows:
         w.writerow([_cell(r["email"]), r["subscribed"]])
-    await db.add_audit("admin", "subscribers_exported", "newsletter", {"count": len(rows)})
+    await db.add_audit(
+        auth.actor_name(request), "subscribers_exported", "newsletter", {"count": len(rows)}
+    )
     return Response(
         "\ufeff" + out.getvalue(),
         media_type="text/csv; charset=utf-8",
