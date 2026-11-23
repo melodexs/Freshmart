@@ -152,9 +152,9 @@ def actor_name(request: Request) -> str:
     return staff_identity(request)["name"]
 
 
-def require_owner(request: Request) -> dict:
+async def require_owner(request: Request) -> dict:
     """Only a named owner account may pass (never the shared key)."""
-    require_staff(request)
+    await require_active_staff(request)
     who = staff_identity(request)
     if who["level"] != "owner":
         raise HTTPException(status_code=403, detail="Only the store owner can do that.")
@@ -171,3 +171,36 @@ def require_staff(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Store feed is disabled.")
     if not is_staff(request):
         raise HTTPException(status_code=401, detail="Staff access required.")
+
+
+async def require_active_staff(request: Request) -> None:
+    """Like require_staff, and for a named admin also checks, on every request, that the account
+    is still active and has chosen its own password.
+
+    Until then the session can do nothing except change the password or ask who it is, so the
+    first password (which someone else set) cannot be used to run the store.
+    """
+    require_staff(request)
+    who = staff_identity(request)
+    if not who["email"]:
+        return  # the shared staff key has no account to check
+    from . import db
+
+    a = await db.get_admin(who["email"])
+    if not a or not a["active"]:
+        raise HTTPException(status_code=401, detail="Staff access required.")
+    if a["mustChange"]:
+        raise HTTPException(status_code=403, detail="Choose your own password first.")
+
+
+async def staff_allowed(request: Request) -> bool:
+    """True when this request may act as staff right now (the yes/no form of require_active_staff)."""
+    if not staff_enabled() or not is_staff(request):
+        return False
+    who = staff_identity(request)
+    if not who["email"]:
+        return True
+    from . import db
+
+    a = await db.get_admin(who["email"])
+    return bool(a and a["active"] and not a["mustChange"])

@@ -36,12 +36,17 @@ async def staff_logout():
 @router.get("/session")
 async def staff_session(request: Request):
     """Lets the UI know whether to show the sign-in form or the feed."""
+    named = bool(
+        auth.staff_enabled() and auth.is_staff(request) and auth.staff_identity(request)["email"]
+    )
     return {
         "enabled": auth.staff_enabled(),
-        "staff": auth.staff_enabled() and auth.is_staff(request),
+        "staff": await auth.staff_allowed(request),
+        # A named admin is signed in (even if they still have to choose a password): ask /me who they are.
+        "signedIn": named,
     }
 
 
-@router.get("/notifications", dependencies=[Depends(auth.require_staff)])
+@router.get("/notifications", dependencies=[Depends(auth.require_active_staff)])
 async def notifications():
     return {"notifications": await db.get_store_sms()}

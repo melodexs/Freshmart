@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from .. import auth, catalogue, db, order_status, ratelimit
 
 router = APIRouter()
-staff_router = APIRouter(dependencies=[Depends(auth.require_staff)])
+staff_router = APIRouter(dependencies=[Depends(auth.require_active_staff)])
 
 MAX_BODY = 600
 

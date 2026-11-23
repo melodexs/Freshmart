@@ -204,6 +204,13 @@ def test_staff_cannot_manage_admins_or_see_the_list(shop):
     )
     shop.cookies.clear()
     assert sign_in(shop, "ngozi@example.com", "Start-Pass-1").status_code == 200
+    assert (
+        shop.post(
+            "/api/store/change-password",
+            json={"current": "Start-Pass-1", "new": "Mango-Tree-Harvest-19"},
+        ).status_code
+        == 200
+    )
     assert shop.get("/api/store/me").json()["level"] == "staff"
     assert shop.get("/api/store/admin/admins").status_code == 403
     r = shop.post(
@@ -414,3 +421,166 @@ def test_confirm_payment_audit_names_the_admin_who_did_it(shop):
 def test_admin_login_is_rate_limited(shop):
     codes = [sign_in(shop, "x@example.com", "wrong-wrong-1").status_code for _ in range(12)]
     assert 429 in codes
+
+
+# ---------- the first password must be changed on the SERVER, not just on the screen ----------
+
+STAFF_ROUTES = [
+    ("GET", "/api/store/admin/orders"),
+    ("GET", "/api/store/admin/overview"),
+    ("GET", "/api/store/admin/customers"),
+    ("GET", "/api/store/admin/products"),
+    ("GET", "/api/store/admin/settings"),
+    ("GET", "/api/store/admin/audit"),
+    ("GET", "/api/store/admin/discounts"),
+    ("GET", "/api/store/admin/reports"),
+    ("GET", "/api/store/admin/orders.csv"),
+    ("GET", "/api/store/admin/subscribers"),
+    ("GET", "/api/store/admin/subscribers.csv"),
+    ("GET", "/api/store/admin/reviews"),
+    ("GET", "/api/store/admin/alerts"),
+    ("GET", "/api/store/notifications"),
+    ("GET", "/api/store/admin/admins"),
+]
+
+
+def test_before_changing_the_first_password_no_staff_route_works(shop):
+    assert sign_in(shop).status_code == 200  # first password, not yet changed
+    assert shop.get("/api/store/me").json()["mustChange"] is True  # still allowed: who am I
+    for method, path in STAFF_ROUTES:
+        r = shop.request(method, path)
+        assert r.status_code == 403, (path, r.status_code)
+        assert "Choose your own password" in r.text, path
+    assert (
+        shop.post(
+            "/api/store/admin/admins",
+            json={
+                "name": "Sneaky Person",
+                "email": "s@example.com",
+                "phone": "08031112222",
+                "role": "owner",
+                "password": "Start-Pass-1",
+            },
+        ).status_code
+        == 403
+    )
+    assert (
+        shop.post(
+            "/api/store/admin/orders/FM00000000/confirm-payment",
+            json={"amount": 1, "method": "cash", "reference": "x"},
+        ).status_code
+        == 403
+    )
+    assert (
+        shop.post(
+            "/api/store/admin/orders/FM00000000/status", json={"status": "Confirmed"}
+        ).status_code
+        == 403
+    )
+    assert shop.get("/api/store/session").json()["staff"] is False
+
+
+def _place_order(c):
+    c.post(
+        "/api/auth/signup",
+        json={
+            "name": "Ada Obi",
+            "phone": "08011111111",
+            "email": "ada@example.com",
+            "password": "secret123",
+            "passwordConfirm": "secret123",
+        },
+    )
+    r = c.post(
+        "/api/orders",
+        json={
+            "items": [{"productId": "p1", "optionIndex": 1, "qty": 2}],
+            "address": "12 Market Rd",
+            "phone": "08022222222",
+            "city": "Otukpo",
+            "payMethod": "before",
+        },
+    )
+    assert r.status_code == 200, r.text
+    c.cookies.clear()  # the customer signs out; the admin session is separate
+    return r.json()["order"]["id"]
+
+
+def test_the_inbox_page_hides_orders_until_the_password_is_changed(shop):
+    oid = _place_order(shop)
+    sign_in(shop)
+    page = shop.get("/api/store/ui")
+    assert (
+        oid not in page.text and "12 Market Rd" not in page.text and "08022222222" not in page.text
+    )
+    assert "Staff key" in page.text  # it shows the sign-in box, not the feed
+    r = shop.post(f"/ui/orders/{oid}/status", data={"status": "Confirmed"})
+    assert oid not in r.text and "12 Market Rd" not in r.text
+    shop.post("/api/store/change-password", json={"current": FIRST, "new": NEW})
+    assert oid in shop.get("/api/store/ui").text  # after the change the feed opens
+
+
+def test_after_changing_the_password_the_same_routes_work(shop):
+    owner_session(shop)
+    for path in (
+        "/api/store/admin/orders",
+        "/api/store/admin/overview",
+        "/api/store/admin/admins",
+        "/api/store/notifications",
+    ):
+        assert shop.get(path).status_code == 200, path
+    assert shop.get("/api/store/session").json()["staff"] is True
+
+
+def test_a_reset_puts_the_account_back_behind_the_password_change(shop):
+    owner_session(shop)
+    shop.post(
+        "/api/store/admin/admins",
+        json={
+            "name": "Ngozi Eze",
+            "email": "ngozi@example.com",
+            "phone": "08031112222",
+            "role": "staff",
+            "password": "Start-Pass-1",
+        },
+    )
+    owner_cookies = dict(shop.cookies)
+    shop.cookies.clear()
+    sign_in(shop, "ngozi@example.com", "Start-Pass-1")
+    shop.post(
+        "/api/store/change-password",
+        json={"current": "Start-Pass-1", "new": "Mango-Tree-Harvest-19"},
+    )
+    assert shop.get("/api/store/admin/orders").status_code == 200
+    staff_cookies = dict(shop.cookies)
+    shop.cookies.clear()
+    shop.cookies.update(owner_cookies)
+    shop.post(
+        "/api/store/admin/admins/ngozi@example.com/reset-password",
+        json={"password": "Another-Temp-2"},
+    )
+    shop.cookies.clear()
+    shop.cookies.update(staff_cookies)  # her old live session
+    assert (
+        shop.get("/api/store/admin/orders").status_code == 403
+    )  # now blocked until she changes it again
+
+
+def test_the_shared_key_is_not_affected_by_the_password_rule(shop):
+    for method, path in STAFF_ROUTES[:3]:
+        assert shop.request(method, path, headers=KEY).status_code == 200, path
+
+
+def test_session_tells_the_dashboard_who_is_signed_in_without_an_error(shop):
+    s = shop.get("/api/store/session").json()
+    assert s["staff"] is False and s["signedIn"] is False  # signed out: no 401 needed to find out
+    sign_in(shop)
+    s = shop.get("/api/store/session").json()
+    assert s["staff"] is False and s["signedIn"] is True  # signed in, must still change password
+    shop.post("/api/store/change-password", json={"current": FIRST, "new": NEW})
+    s = shop.get("/api/store/session").json()
+    assert s["staff"] is True and s["signedIn"] is True
+    shop.cookies.clear()
+    assert (
+        shop.get("/api/store/session", headers=KEY).json()["signedIn"] is False
+    )  # shared key has no account
