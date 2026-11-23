@@ -20,7 +20,7 @@ from .. import auth, config, db, ratelimit
 from ..emails import clean_email
 
 router = APIRouter()
-staff_router = APIRouter(dependencies=[Depends(auth.require_staff)])
+staff_router = APIRouter(dependencies=[Depends(auth.require_active_staff)])
 
 
 def token_for(email: str) -> str:

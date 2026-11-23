@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, Response
 
 from .. import auth, db, order_status
 
-router = APIRouter(dependencies=[Depends(auth.require_staff)])
+router = APIRouter(dependencies=[Depends(auth.require_active_staff)])
 
 LAGOS = ZoneInfo("Africa/Lagos")
 RANGES = {7, 30, 90}

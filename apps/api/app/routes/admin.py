@@ -18,7 +18,7 @@ from .products import with_photo
 
 MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
 
-router = APIRouter(dependencies=[Depends(auth.require_staff)])
+router = APIRouter(dependencies=[Depends(auth.require_active_staff)])
 
 MAX_PRICE = 10_000_000
 MAX_OPTIONS = 12

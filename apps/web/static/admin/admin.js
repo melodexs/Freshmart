@@ -32,6 +32,11 @@ async function api(path, opts = {}) {
   if (opts.body !== undefined) { init.headers["Content-Type"] = "application/json"; init.body = JSON.stringify(opts.body); }
   let res;
   try { res = await fetch(API + path, init); } catch { throw new Error("Cannot reach the store. Check your connection."); }
+  if (res.status === 403) {
+    let d403 = {}; try { d403 = await res.clone().json(); } catch { /* empty */ }
+    if (/own password/i.test(d403.detail || "")) { await afterSignIn(); throw new Error("Choose your own password first."); }
+    if (/owner/i.test(d403.detail || "")) throw new Error(d403.detail);
+  }
   if (res.status === 401 || res.status === 403) { showLogin(); throw new Error("Please sign in again."); }
   let data = {};
   try { data = await res.json(); } catch { /* empty body */ }
@@ -600,7 +605,8 @@ function resetPw(a, done) {
 // ---------- start ----------
 (async () => {
   try {
+    // /me answers for a signed-in admin who still has to choose a password; /session does not.
     const r = await fetch("/api/store/session", { credentials: "same-origin" }); const d = await r.json();
-    if (d.staff) await afterSignIn(); else showLogin();
+    if (d.staff || d.signedIn) await afterSignIn(); else showLogin();
   } catch { showLogin(); }
 })();

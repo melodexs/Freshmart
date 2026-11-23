@@ -450,7 +450,7 @@ async def my_orders(request: Request):
 async def store_inbox(request: Request):
     if not auth.staff_enabled():
         return _render(request, "partials/store_off.html")
-    if not auth.is_staff(request):
+    if not await auth.staff_allowed(request):
         return _render(request, "partials/store_login.html", message=None)
     return await _store_feed(request)
 
@@ -496,7 +496,7 @@ async def staff_set_status(request: Request, order_id: str, status: str = Form("
     """Staff moves an order along its lifecycle. Only allowed moves are accepted."""
     if not auth.staff_enabled():
         return _render(request, "partials/store_off.html")
-    if not auth.is_staff(request):
+    if not await auth.staff_allowed(request):
         return _render(request, "partials/store_login.html", status=401, message=None)
     order = await db.get_order(order_id)
     if not order:

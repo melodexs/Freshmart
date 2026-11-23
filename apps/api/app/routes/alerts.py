@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 
 from .. import auth, db, mailer, order_status
 
-router = APIRouter(dependencies=[Depends(auth.require_staff)])
+router = APIRouter(dependencies=[Depends(auth.require_active_staff)])
 
 SEEN_KEY = "orders_seen_at"
 # An order the customer can no longer change by cancelling yet still needs staff attention.
