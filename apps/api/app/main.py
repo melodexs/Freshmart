@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import auth, catalogue, config, db
 from .routes import account as account_routes
 from .routes import admin as admin_routes
+from .routes import admins as admins_routes
 from .routes import alerts as alert_routes
 from .routes import auth as auth_routes
 from .routes import newsletter as newsletter_routes
@@ -29,6 +30,7 @@ from .templating import templates
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
+    await admins_routes.seed_first_owner()
     # Remember which customers have reset their password, so old sessions stay dead after a restart.
     stored = await db.get_setting("session_cutoffs", {})
     if isinstance(stored, dict):
@@ -138,6 +140,8 @@ app.include_router(auth_routes.router, prefix="/api/auth")
 app.include_router(product_routes.router, prefix="/api/products")
 app.include_router(order_routes.router, prefix="/api/orders")
 app.include_router(store_routes.router, prefix="/api/store")
+app.include_router(admins_routes.router, prefix="/api/store")
+app.include_router(admins_routes.owner_router, prefix="/api/store/admin")
 app.include_router(admin_routes.router, prefix="/api/store/admin")
 app.include_router(report_routes.router, prefix="/api/store/admin")
 app.include_router(alert_routes.router, prefix="/api/store/admin")

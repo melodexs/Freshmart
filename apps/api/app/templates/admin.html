@@ -10,13 +10,38 @@
 </head>
 <body>
 <div id="login" class="login" hidden>
-  <form id="loginForm" class="login-card" autocomplete="off">
+  <form id="loginForm" class="login-card" autocomplete="on">
     <div class="brand"><span class="mark">OGS</span><span>Admin</span></div>
-    <p class="muted">Enter the staff key to manage the store.</p>
-    <label for="staffKey">Staff key</label>
-    <input id="staffKey" type="password" autocomplete="current-password" required>
+    <p class="muted">Sign in with your admin email and password.</p>
+    <label for="adminEmail">Email</label>
+    <input id="adminEmail" type="email" autocomplete="username" inputmode="email" required>
+    <label for="adminPassword">Password</label>
+    <input id="adminPassword" type="password" autocomplete="current-password" required>
     <button class="btn primary" type="submit">Sign in</button>
     <p id="loginMsg" class="msg" role="alert"></p>
+    <button id="useKey" class="linkdark" type="button">Use the shared staff key instead</button>
+  </form>
+  <form id="keyForm" class="login-card" autocomplete="off" hidden>
+    <div class="brand"><span class="mark">OGS</span><span>Admin</span></div>
+    <p class="muted">Enter the shared staff key. This gives staff access only. Owners sign in with their own email.</p>
+    <label for="staffKey">Staff key</label>
+    <input id="staffKey" type="password" autocomplete="off" required>
+    <button class="btn primary" type="submit">Sign in with key</button>
+    <p id="keyMsg" class="msg" role="alert"></p>
+    <button id="useEmail" class="linkdark" type="button">Sign in with my email instead</button>
+  </form>
+  <form id="changeForm" class="login-card" autocomplete="off" hidden>
+    <div class="brand"><span class="mark">OGS</span><span>Admin</span></div>
+    <p><strong>Choose your own password</strong></p>
+    <p class="muted">The password you were given is only for your first sign-in. Choose a new one only you know: at least 10 characters, with letters, and not your name, email or phone number.</p>
+    <label for="curPw">Password you were given</label>
+    <input id="curPw" type="password" autocomplete="current-password" required>
+    <label for="newPw">New password</label>
+    <input id="newPw" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="newPw2">New password again</label>
+    <input id="newPw2" type="password" autocomplete="new-password" minlength="10" required>
+    <button class="btn primary" type="submit">Set my password</button>
+    <p id="changeMsg" class="msg" role="alert"></p>
   </form>
 </div>
 
@@ -34,8 +59,11 @@
       <button data-view="discounts">Discount codes</button>
       <button data-view="customers">Customers</button>
       <button data-view="settings">Store settings</button>
+      <button data-view="admins" id="adminsNav" hidden>Admin team</button>
     </nav>
     <div class="side-foot">
+      <div id="whoami" class="whoami"></div>
+      <button id="changePwBtn" class="link" hidden>Change my password</button>
       <a href="/" target="_blank" rel="noopener">View store</a>
       <button id="logout" class="link">Sign out</button>
     </div>

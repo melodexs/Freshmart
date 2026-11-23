@@ -13,7 +13,7 @@ import io
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
 from .. import auth, db, order_status
@@ -155,7 +155,7 @@ def orders_csv(orders: list[dict]) -> str:
 
 
 @router.get("/orders.csv")
-async def export_orders(status: str = "", days: int = 0):
+async def export_orders(request: Request, status: str = "", days: int = 0):
     orders = await db.get_all_orders()
     if status:
         orders = [o for o in orders if o["status"] == status]
@@ -165,7 +165,10 @@ async def export_orders(status: str = "", days: int = 0):
         )
         orders = [o for o in orders if lagos_day(o["date"]) >= first]
     await db.add_audit(
-        "admin", "orders_exported", "orders", {"count": len(orders), "status": status, "days": days}
+        auth.actor_name(request),
+        "orders_exported",
+        "orders",
+        {"count": len(orders), "status": status, "days": days},
     )
     stamp = datetime.now(LAGOS).strftime("%Y-%m-%d")
     return Response(
