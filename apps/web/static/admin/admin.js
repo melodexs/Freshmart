@@ -40,27 +40,74 @@ async function api(path, opts = {}) {
 }
 
 // ---------- sign in ----------
-function showLogin() { $("#app").hidden = true; $("#login").hidden = false; $("#staffKey").focus(); }
-function showApp() { $("#login").hidden = true; $("#app").hidden = false; }
+let me = null; // who is signed in: { name, email, level, mustChange }
+const loginForms = ["#loginForm", "#keyForm", "#changeForm"];
+function showForm(sel) { for (const f of loginForms) $(f).hidden = f !== sel; }
+function showLogin() { me = null; $("#app").hidden = true; $("#login").hidden = false; showForm("#loginForm"); $("#adminEmail").focus(); }
+function showApp() {
+  $("#login").hidden = true; $("#app").hidden = false;
+  const owner = me && me.level === "owner";
+  $("#adminsNav").hidden = !owner;
+  $("#changePwBtn").hidden = !(me && me.email);
+  $("#whoami").textContent = me ? `${me.name} · ${owner ? "Owner" : "Staff"}` : "";
+}
+async function post(path, body) {
+  const r = await fetch("/api/store" + path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, d };
+}
+async function loadMe() {
+  const r = await fetch("/api/store/me", { credentials: "same-origin" });
+  if (!r.ok) return null;
+  return r.json();
+}
+async function afterSignIn() {
+  me = await loadMe();
+  if (!me) { showLogin(); return; }
+  if (me.mustChange) { $("#app").hidden = true; $("#login").hidden = false; showForm("#changeForm"); $("#curPw").focus(); return; }
+  showApp(); go("overview");
+}
 
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = $("#loginMsg"); msg.textContent = "";
   try {
-    const r = await fetch("/api/store/login", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: $("#staffKey").value }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { msg.textContent = d.error || "That did not work."; return; }
-    $("#staffKey").value = ""; showApp(); go("overview");
+    const { ok, d } = await post("/admin-login", { email: $("#adminEmail").value, password: $("#adminPassword").value });
+    if (!ok) { msg.textContent = d.error || "That did not work."; return; }
+    $("#adminPassword").value = ""; await afterSignIn();
   } catch { msg.textContent = "Cannot reach the store."; }
 });
+$("#keyForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#keyMsg"); msg.textContent = "";
+  try {
+    const { ok, d } = await post("/login", { key: $("#staffKey").value });
+    if (!ok) { msg.textContent = d.error || "That did not work."; return; }
+    $("#staffKey").value = ""; await afterSignIn();
+  } catch { msg.textContent = "Cannot reach the store."; }
+});
+$("#changeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#changeMsg"); msg.textContent = "";
+  if ($("#newPw").value !== $("#newPw2").value) { msg.textContent = "The two new passwords do not match."; return; }
+  try {
+    const { ok, d } = await post("/change-password", { current: $("#curPw").value, new: $("#newPw").value });
+    if (!ok) { msg.textContent = d.error || "That did not work."; return; }
+    for (const id of ["#curPw", "#newPw", "#newPw2"]) $(id).value = "";
+    toast("Password saved"); await afterSignIn();
+  } catch { msg.textContent = "Cannot reach the store."; }
+});
+$("#useKey").addEventListener("click", () => { showForm("#keyForm"); $("#staffKey").focus(); });
+$("#useEmail").addEventListener("click", () => { showForm("#loginForm"); $("#adminEmail").focus(); });
+$("#changePwBtn").addEventListener("click", () => { $("#app").hidden = true; $("#login").hidden = false; showForm("#changeForm"); $("#curPw").focus(); });
 $("#logout").addEventListener("click", async () => {
   await fetch("/api/store/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   showLogin();
 });
 
 // ---------- navigation ----------
-const views = { overview, reports, reviews, newsletter, orders, products, stock, discounts, customers, settings };
-const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", newsletter: "Newsletter", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings" };
+const views = { overview, reports, reviews, newsletter, orders, products, stock, discounts, customers, settings, admins };
+const titles = { overview: "Overview", reports: "Sales reports", reviews: "Customer reviews", newsletter: "Newsletter", orders: "Orders", products: "Products", stock: "Stock history", discounts: "Discount codes", customers: "Customers", settings: "Store settings", admins: "Admin team" };
 function go(name) {
   for (const b of document.querySelectorAll("#nav button")) b.classList.toggle("on", b.dataset.view === name);
   $("#title").textContent = titles[name]; $("#side").classList.remove("open");
@@ -493,10 +540,67 @@ async function settings(root) {
   root.replaceChildren(form);
 }
 
+
+// ---------- admin team (owner only) ----------
+async function admins(root) {
+  if (!me || me.level !== "owner") { root.replaceChildren(h("div", { class: "empty", text: "Only the store owner can manage the admin team." })); return; }
+  const d = await api("/admins");
+  const rows = d.admins.map((a) => {
+    const self = a.email === me.email;
+    return h("tr", {},
+      h("td", {}, h("strong", { text: a.name }), self ? h("span", { class: "muted", text: " (you)" }) : null, h("div", { class: "muted", text: a.email }), h("div", { class: "muted", text: a.phone })),
+      h("td", {}, h("span", { class: "pill " + (a.role === "owner" ? "owner" : ""), text: a.role === "owner" ? "Owner" : "Staff" })),
+      h("td", {}, h("span", { class: "pill " + (a.active ? "ok" : ""), text: a.active ? (a.mustChange ? "Active, password not yet changed" : "Active") : "Deactivated" })),
+      h("td", { text: a.lastLogin ? when(a.lastLogin) : "Never" }),
+      h("td", {}, h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" },
+        h("button", { class: "btn sm", text: a.active ? "Deactivate" : "Reactivate", onclick: async () => { try { await api(`/admins/${encodeURIComponent(a.email)}/active`, { method: "POST", body: { active: !a.active } }); toast(a.active ? "Deactivated" : "Reactivated"); admins(root); } catch (err) { toast(err.message, true); } } }),
+        h("button", { class: "btn sm", text: a.role === "owner" ? "Make staff" : "Make owner", onclick: async () => { try { await api(`/admins/${encodeURIComponent(a.email)}/role`, { method: "POST", body: { role: a.role === "owner" ? "staff" : "owner" } }); toast("Role changed"); admins(root); } catch (err) { toast(err.message, true); } } }),
+        h("button", { class: "btn sm", text: "Reset password", onclick: () => resetPw(a, () => admins(root)) }))));
+  });
+  root.replaceChildren(
+    h("div", { class: "toolbar" }, h("span", { class: "grow" }), h("button", { class: "btn primary", onclick: () => adminEditor(() => admins(root)), text: "+ Add admin" })),
+    table(["Person", "Role", "Status", "Last sign-in", ""], rows, "No admins yet."),
+    h("p", { class: "muted", text: "Owners can manage this team. Staff can run orders, products and customers but cannot see or change admin accounts. Every action is recorded under the person's name. The shared staff key only ever gives staff access." }));
+}
+function openModal(title, form) {
+  const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: title }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(modal);
+  return close;
+}
+function adminEditor(done) {
+  const f = { name: "", email: "", phone: "", role: "staff", password: "" };
+  const msg = h("p", { class: "msg", role: "alert" });
+  const inp = (label, key, extra = {}) => h("div", {}, h("label", { text: label }), h("input", { value: f[key], oninput: (e) => (f[key] = e.target.value), ...extra }));
+  let close;
+  const role = h("select", { "aria-label": "Role", onchange: (e) => (f.role = e.target.value) }, h("option", { value: "staff", text: "Staff (orders, products, customers)" }), h("option", { value: "owner", text: "Owner (everything, including the admin team)" }));
+  const form = h("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault(); msg.textContent = "";
+    try { await api("/admins", { method: "POST", body: f }); toast("Admin added"); close(); done(); } catch (err) { msg.textContent = err.message; }
+  } },
+    inp("Full name", "name", { required: true, maxlength: "80" }), inp("Email", "email", { type: "email", required: true, maxlength: "120" }), inp("Nigerian mobile number", "phone", { required: true, inputmode: "tel", placeholder: "0803 123 4567" }),
+    h("div", {}, h("label", { text: "Role" }), role),
+    inp("First password (they must change it when they first sign in)", "password", { type: "text", required: true, minlength: "8", maxlength: "72", autocomplete: "off" }),
+    msg, h("div", { style: "display:flex;gap:8px" }, h("button", { class: "btn primary", type: "submit", text: "Add admin" }), h("button", { class: "btn", type: "button", onclick: () => close(), text: "Cancel" })));
+  close = openModal("Add admin", form);
+}
+function resetPw(a, done) {
+  const f = { password: "" }; const msg = h("p", { class: "msg", role: "alert" }); let close;
+  const form = h("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault(); msg.textContent = "";
+    try { await api(`/admins/${encodeURIComponent(a.email)}/reset-password`, { method: "POST", body: f }); toast("Password reset"); close(); done(); } catch (err) { msg.textContent = err.message; }
+  } },
+    h("p", { text: `Set a temporary password for ${a.name}. They must choose their own at next sign-in.` }),
+    h("div", {}, h("label", { text: "Temporary password" }), h("input", { oninput: (e) => (f.password = e.target.value), required: true, minlength: "8", maxlength: "72", autocomplete: "off" })),
+    msg, h("div", { style: "display:flex;gap:8px" }, h("button", { class: "btn primary", type: "submit", text: "Reset password" }), h("button", { class: "btn", type: "button", onclick: () => close(), text: "Cancel" })));
+  close = openModal("Reset password", form);
+}
+
 // ---------- start ----------
 (async () => {
   try {
     const r = await fetch("/api/store/session", { credentials: "same-origin" }); const d = await r.json();
-    if (d.staff) { showApp(); go("overview"); } else showLogin();
+    if (d.staff) await afterSignIn(); else showLogin();
   } catch { showLogin(); }
 })();
