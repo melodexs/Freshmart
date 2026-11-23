@@ -607,3 +607,37 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 .co-fee{flex-wrap:wrap}
 .co-eta{flex:1 1 100%;margin-top:4px;font-size:.88rem;color:var(--green-700);font-weight:600}
 .eta-line{margin-top:4px;font-size:.84rem;color:#1f5a3d;font-weight:600}
+
+/* ===== Market-style product cards (PricePally-inspired layout, OGS colours) =====
+   Shop listing only, not the product page. Cart logic unchanged: same Add button and stepper. */
+#productGrid:not(.pdp-grid){grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 14px}
+@media(min-width:560px){#productGrid:not(.pdp-grid){grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:820px){#productGrid:not(.pdp-grid){grid-template-columns:repeat(4,minmax(0,1fr));gap:26px 18px}}
+@media(min-width:1080px){#productGrid:not(.pdp-grid){grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:1280px){#productGrid:not(.pdp-grid){grid-template-columns:repeat(6,minmax(0,1fr))}}
+#productGrid:not(.pdp-grid) .card{position:relative;background:none;border:0;border-radius:0;box-shadow:none;padding:0;gap:6px;transform:none}
+#productGrid:not(.pdp-grid) .card:hover{transform:none;box-shadow:none}
+#productGrid:not(.pdp-grid) .thumb{aspect-ratio:1/1;height:auto;border:0;border-radius:14px;background:var(--frame,#f4f1e8)}
+#productGrid:not(.pdp-grid) h3{font-size:.9rem;font-weight:600;line-height:1.3;min-height:2.6em;letter-spacing:0;font-family:var(--sans,inherit);margin-top:4px}
+#productGrid:not(.pdp-grid) h3 a{color:var(--ink);text-decoration:none}
+#productGrid:not(.pdp-grid) h3 a:hover{text-decoration:underline}
+#productGrid:not(.pdp-grid) .row{margin-top:0;justify-content:flex-start;gap:8px;align-items:baseline}
+#productGrid:not(.pdp-grid) .price{font-size:.98rem}
+#productGrid:not(.pdp-grid) .was{font-size:.78rem;opacity:.6}
+#productGrid:not(.pdp-grid) .unit{font-size:.8rem;opacity:.7;margin:0}
+#productGrid:not(.pdp-grid) .opt-select{padding:5px 8px;font-size:.8rem;background:#fff;border-radius:8px}
+#productGrid:not(.pdp-grid) .card-rating,#productGrid:not(.pdp-grid) .stock-note{margin:0}
+#productGrid:not(.pdp-grid) .stock-note{font-size:.76rem}
+#productGrid:not(.pdp-grid) .photo-wrap{position:relative}
+#productGrid:not(.pdp-grid) .qtyArea{position:absolute;right:8px;bottom:8px;z-index:3;margin:0;pointer-events:none}
+#productGrid:not(.pdp-grid) .qtyArea>*{pointer-events:auto}
+#productGrid:not(.pdp-grid) .add-btn{width:42px;height:42px;padding:0;border-radius:50%;font-size:0;display:grid;place-items:center;box-shadow:0 4px 10px rgba(18,40,29,.28);border:2px solid #fff;position:relative}
+#productGrid:not(.pdp-grid) .add-btn::before{content:"+";font-size:1.7rem;color:#fff;line-height:1;margin-top:-2px}
+#productGrid:not(.pdp-grid) .add-btn:hover{transform:scale(1.06)}
+#productGrid:not(.pdp-grid) .add-btn:focus-visible{outline:3px solid var(--gold,#d9b25a);outline-offset:2px}
+#productGrid:not(.pdp-grid) .stepper{background:var(--green-700);color:#fff;border-radius:999px;padding:3px;gap:2px;box-shadow:0 4px 10px rgba(18,40,29,.28);border:2px solid #fff}
+#productGrid:not(.pdp-grid) .stepper button{width:30px;height:30px;border-radius:50%;background:none;color:#fff;border:0;font-size:1.2rem}
+#productGrid:not(.pdp-grid) .stepper span{min-width:20px;text-align:center;font-weight:700;font-size:.9rem}
+#productGrid:not(.pdp-grid) .note-input{position:absolute;right:0;bottom:calc(100% + 6px);z-index:4;width:min(220px,70vw);background:#fff;box-shadow:0 6px 16px rgba(18,40,29,.16)}
+#productGrid:not(.pdp-grid) .off-badge.corner{top:8px;left:8px}
+@media(prefers-reduced-motion:reduce){#productGrid:not(.pdp-grid) .add-btn:hover{transform:none}}
