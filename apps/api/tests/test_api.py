@@ -164,7 +164,11 @@ def test_store_feed_disabled_in_production_without_key(client, monkeypatch):
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     assert client.get("/api/store/notifications").status_code == 403
     assert client.post("/api/store/login", json={"key": "x"}).status_code == 403
-    assert client.get("/api/store/session").json() == {"enabled": False, "staff": False}
+    assert client.get("/api/store/session").json() == {
+        "enabled": False,
+        "staff": False,
+        "signedIn": False,
+    }
 
 
 def test_staff_login_flow(client, monkeypatch):
@@ -172,7 +176,11 @@ def test_staff_login_flow(client, monkeypatch):
 
     monkeypatch.setattr(config, "STORE_STAFF_KEY", "s3cret")
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
-    assert client.get("/api/store/session").json() == {"enabled": True, "staff": False}
+    assert client.get("/api/store/session").json() == {
+        "enabled": True,
+        "staff": False,
+        "signedIn": False,
+    }
     bad = client.post("/api/store/login", json={"key": "nope"})
     assert bad.status_code == 401 and bad.json()["error"]
     assert client.get("/api/store/notifications").status_code == 401
@@ -180,7 +188,11 @@ def test_staff_login_flow(client, monkeypatch):
     assert ok.status_code == 200
     sc = ok.headers["set-cookie"].lower()
     assert "httponly" in sc and "samesite=strict" in sc and "path=/api/store" in sc
-    assert client.get("/api/store/session").json() == {"enabled": True, "staff": True}
+    assert client.get("/api/store/session").json() == {
+        "enabled": True,
+        "staff": True,
+        "signedIn": False,
+    }
     assert client.get("/api/store/notifications").status_code == 200
     client.post("/api/store/logout")
     assert client.get("/api/store/notifications").status_code == 401
