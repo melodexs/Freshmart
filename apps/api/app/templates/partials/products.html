@@ -18,7 +18,10 @@
   <div class="card" data-product-id="{{ p.id }}" data-cat="{{ p.cat }}">
     {% if pct %}<span class="off-badge corner">{{ pct }}% off</span>{% endif %}
     <span class="fav-slot">{% with pid=p.id, on=(p.id in fav_ids) %}{% include "partials/fav_button.html" %}{% endwith %}</span>
-    <a class="thumb-link" href="/product/{{ p.id }}" aria-label="View {{ p.name }}"><div class="thumb"{% if p.id|frame_colour %} style="--frame:{{ p.id|frame_colour }}"{% endif %}>{{ p|product_art }}</div></a>
+    <div class="photo-wrap">
+      <a class="thumb-link" href="/product/{{ p.id }}" aria-label="View {{ p.name }}"><div class="thumb"{% if p.id|frame_colour %} style="--frame:{{ p.id|frame_colour }}"{% endif %}>{{ p|product_art }}</div></a>
+      {% if p.stock is none or p.stock > 0 %}<div class="qtyArea"></div>{% endif %}
+    </div>
     <h3><a href="/product/{{ p.id }}">{{ p.name }}</a></h3>
     {% if p.options|length > 1 %}
       <select class="opt-select" aria-label="Choose size for {{ p.name }}">
@@ -33,7 +36,6 @@
       <div class="stock-note sold-out">Out of stock</div>
     {% else %}
       {% if p.stock is not none and p.stock <= 5 %}<div class="stock-note low">Only {{ p.stock }} left</div>{% endif %}
-      <div class="qtyArea"></div>
     {% endif %}
     <script type="application/json" class="product-data">{{ {"id": p.id, "name": p.name, "emoji": p.emoji, "photo": (p|photo_for or ""), "options": p.options}|tojson }}</script>
   </div>
