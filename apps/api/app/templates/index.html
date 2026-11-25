@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
 {% block body %}
 <header>
   <div class="topbar">
@@ -12,9 +13,9 @@
     </nav>
     <div class="topbar-spacer"></div>
     <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
-    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">📦 Orders</button>
-    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">🔎 Track</button>
-    <button class="icon-btn" id="cartBtn" type="button">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
+    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">{{ icon("box") }}<span>Orders</span></button>
+    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">{{ icon("search") }}<span>Track</span></button>
+    <button class="icon-btn" id="cartBtn" type="button">{{ icon("cart") }}<span>Cart</span> <span class="cart-count" id="cartCount">0</span></button>
   </div>
   <div class="search-row"><div class="wrap"><div class="search" id="filters">
     <input id="searchInput" name="q" type="search" placeholder="Search rice, noodles, drinks..." autocomplete="off" aria-label="Search products"
@@ -34,7 +35,7 @@
       <input id="minPrice" name="min" type="number" inputmode="numeric" min="0" placeholder="Min ₦" aria-label="Minimum price" hx-get="/ui/products" hx-trigger="change, keyup changed delay:400ms" hx-target="#catalog" hx-include="#filters">
       <input id="maxPrice" name="max" type="number" inputmode="numeric" min="0" placeholder="Max ₦" aria-label="Maximum price" hx-get="/ui/products" hx-trigger="change, keyup changed delay:400ms" hx-target="#catalog" hx-include="#filters">
     </div>
-    <button type="button" class="chip" id="favFilter" aria-pressed="false" hx-get="/ui/products" hx-vals='{"favs":"1"}' hx-target="#catalog" hx-include="#filters">♡ Favourites</button>
+    <button type="button" class="chip" id="favFilter" aria-pressed="false" hx-get="/ui/products" hx-vals='{"favs":"1"}' hx-target="#catalog" hx-include="#filters">{{ icon("heart") }}<span>Favourites</span></button>
       </div>
     </details>
   </div></div></div>

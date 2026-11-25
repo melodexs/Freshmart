@@ -298,3 +298,8 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 .card .thumb img.photo, .pdp-media .thumb img.photo{position:relative; z-index:1; background:var(--frame,#e9eee9);}
 @keyframes ogs-shimmer{to{background-position:-200% 0;}}
 @media (prefers-reduced-motion: reduce){.card .thumb:has(img.photo), .pdp-media .thumb:has(img.photo), .mini-card .thumb:has(img.photo){animation:none;}}
+
+/* Header and chip icons: inline SVG that follows the text colour. */
+.ico{flex:none; width:1.15em; height:1.15em; display:inline-block; vertical-align:-.2em}
+.chip .ico{width:1em; height:1em; margin-right:5px}
+.chip[aria-pressed="true"] .ico{fill:currentColor}
