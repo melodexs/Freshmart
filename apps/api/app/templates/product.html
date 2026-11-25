@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
 {% block title %}{{ p.name }} — Okwui&#39;s Grocery Store (OGS){% endblock %}
 {% block body %}
 <header>
@@ -6,9 +7,9 @@
     <a class="logo" href="/" aria-label="Okwui&#39;s Grocery Store (OGS) home"><span class="logo-full">Okwui&#39;s Grocery Store </span><span class="logo-abbr">OGS</span></a>
     <div class="topbar-spacer"></div>
     <div id="account-area" class="account-area">{% include "partials/account.html" %}</div>
-    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">📦 Orders</button>
-    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">🔎 Track</button>
-    <button class="icon-btn" id="cartBtn" type="button">🛒 Cart <span class="cart-count" id="cartCount">0</span></button>
+    <button class="icon-btn" id="ordersBtn" type="button" hx-get="/ui/orders" hx-target="#ordersList" hx-swap="innerHTML" data-open-modal="ordersOverlay">{{ icon("box") }}<span>Orders</span></button>
+    <button class="icon-btn" id="trackBtn" type="button" hx-get="/ui/track" hx-target="#trackBody" hx-swap="innerHTML" data-open-modal="trackOverlay">{{ icon("search") }}<span>Track</span></button>
+    <button class="icon-btn" id="cartBtn" type="button">{{ icon("cart") }}<span>Cart</span> <span class="cart-count" id="cartCount">0</span></button>
   </div>
 </header>
 

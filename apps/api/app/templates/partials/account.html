@@ -1,13 +1,14 @@
 {# Header account buttons. Re-rendered after sign in / sign out. #}
+{% from "partials/icons.html" import icon %}
 {% if user %}
-  <a class="icon-btn" id="accountBtn" href="/account">👤 <span id="accountLabel">{{ user.name.split(' ')[0] }}</span></a>
+  <a class="icon-btn" id="accountBtn" href="/account">{{ icon("user") }}<span id="accountLabel">{{ user.name.split(' ')[0] }}</span></a>
   <button class="icon-btn" id="logoutBtn" type="button"
-          hx-post="/ui/logout" hx-target="#account-area" hx-swap="innerHTML">⎋ Sign out</button>
+          hx-post="/ui/logout" hx-target="#account-area" hx-swap="innerHTML">{{ icon("logout") }}<span>Sign out</span></button>
 {% else %}
   <button class="icon-btn" id="accountBtn" type="button"
           hx-get="/ui/signin" hx-target="#authBody" hx-swap="innerHTML"
-          data-open-modal="authOverlay" data-last-email>👤 <span id="accountLabel">Sign in</span></button>
+          data-open-modal="authOverlay" data-last-email>{{ icon("user") }}<span id="accountLabel">Sign in</span></button>
   <button class="icon-btn" id="createAcctBtn" type="button"
           hx-get="/ui/signup" hx-target="#signupBody" hx-swap="innerHTML"
-          data-open-modal="signupOverlay" aria-label="Create account">📝 <span class="lbl-long">Create account</span><span class="lbl-short">Join</span></button>
+          data-open-modal="signupOverlay" aria-label="Create account">{{ icon("user-plus") }}<span class="lbl-long">Create account</span><span class="lbl-short">Join</span></button>
 {% endif %}
