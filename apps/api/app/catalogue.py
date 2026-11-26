@@ -93,17 +93,36 @@ async def restock_order(
         await db.release_discount(order["id"])
 
 
-async def bank_details() -> dict:
-    """The store's real bank account, set by the admin. Empty until the owner enters it.
+MAX_BANK_ACCOUNTS = 3
+_ACCT_KEYS = ("bank", "accountName", "accountNumber")
 
-    Nothing here is ever invented: when the account is not set, checkout offers no transfer option.
-    """
-    d = await db.get_setting("bank_details")
+
+def _clean_accounts(d: object) -> list[dict]:
+    """The saved accounts as a clean list. Older saves held one account as top-level fields."""
     if not isinstance(d, dict):
-        return {"bank": "", "accountName": "", "accountNumber": "", "ready": False}
-    out = {k: str(d.get(k) or "") for k in ("bank", "accountName", "accountNumber")}
-    out["ready"] = all(out.values())
+        return []
+    raw = d.get("accounts")
+    items = raw if isinstance(raw, list) else [d]
+    out = []
+    for a in items[:MAX_BANK_ACCOUNTS]:
+        if not isinstance(a, dict):
+            continue
+        acct = {k: str(a.get(k) or "") for k in _ACCT_KEYS}
+        if all(acct.values()):
+            out.append(acct)
     return out
+
+
+async def bank_details() -> dict:
+    """The store's real bank accounts, set by the admin. Empty until the owner enters them.
+
+    `accounts` lists every complete account (up to three). The top-level bank, accountName and
+    accountNumber are the first account, so older code and saved orders keep working. Nothing here
+    is ever invented: with no account set, checkout offers no transfer option.
+    """
+    accounts = _clean_accounts(await db.get_setting("bank_details"))
+    first = accounts[0] if accounts else dict.fromkeys(_ACCT_KEYS, "")
+    return {**first, "accounts": accounts, "ready": bool(accounts)}
 
 
 DEFAULT_AREA = "Otukpo"

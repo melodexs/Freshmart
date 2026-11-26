@@ -142,13 +142,16 @@ function renderFee(): void {
 
 // ---------- step 3: payment ----------
 
-interface Bank {
+export interface BankAccount {
   bank: string;
   accountName: string;
   accountNumber: string;
+}
+interface Bank extends BankAccount {
+  accounts: BankAccount[];
   ready: boolean;
 }
-let bank: Bank = { bank: "", accountName: "", accountNumber: "", ready: false };
+let bank: Bank = { bank: "", accountName: "", accountNumber: "", accounts: [], ready: false };
 export function setBankDetails(b: Bank | undefined): void {
   if (b) bank = b;
 }
@@ -207,14 +210,18 @@ function renderPayPanel(): void {
   }
   const row = (k: string, v: string) =>
     h("div", { class: "bank-row" }, h("span", { text: k }), h("strong", { text: v }));
+  const accounts = bank.accounts.length ? bank.accounts : [bank];
+  const many = accounts.length > 1;
   panel.append(
-    h("div", { class: "bank-card" },
-      h("div", { class: "bank-title", text: "Pay by bank transfer to" }),
-      row("Bank", bank.bank),
-      row("Account name", bank.accountName),
-      row("Account number", bank.accountNumber),
-      row("Amount", money(total())),
+    h("div", { class: "bank-title", text: many ? "Pay by bank transfer to any one of these accounts" : "Pay by bank transfer to" }),
+    ...accounts.map((a) =>
+      h("div", { class: "bank-card" },
+        row("Bank", a.bank),
+        row("Account name", a.accountName),
+        row("Account number", a.accountNumber),
+      ),
     ),
+    h("div", { class: "bank-card" }, row("Amount", money(total()))),
     h("div", {
       class: "small-note",
       text: "After you place the order you will get a reference. Use it as the transfer narration. Your order stays 'Awaiting payment' until we confirm the money, then we start packing.",
