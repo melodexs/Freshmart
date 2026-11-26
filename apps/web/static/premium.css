@@ -303,3 +303,6 @@ header{backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturat
 .ico{flex:none; width:1.15em; height:1.15em; display:inline-block; vertical-align:-.2em}
 .chip .ico{width:1em; height:1em; margin-right:5px}
 .chip[aria-pressed="true"] .ico{fill:currentColor}
+
+/* Several bank accounts at checkout: one card each, then the amount. */
+.bank-card + .bank-card{margin-top:8px}

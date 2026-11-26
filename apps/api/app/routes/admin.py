@@ -247,24 +247,46 @@ async def put_settings(request: Request):
             auth.actor_name(request), "delivery_areas_changed", "settings", {"areas": areas}
         )
     if "bank" in b:
-        raw = b["bank"] if isinstance(b["bank"], dict) else {}
-        bank = clean_text(raw.get("bank"), 60)
-        name = clean_text(raw.get("accountName"), 80)
-        number = re.sub(r"\s", "", clean_text(raw.get("accountNumber"), 20))
-        if (bank or name or number) and not (bank and name and number):
-            return err(
-                400, "Enter the bank, account name and account number together, or clear all three."
-            )
-        if number and not re.fullmatch(r"\d{10}", number):
-            return err(400, "A Nigerian account number has exactly 10 digits.")
-        await db.set_setting(
-            "bank_details", {"bank": bank, "accountName": name, "accountNumber": number}
-        )
+        # One account (the old shape) or a list of up to three. Each needs all three fields.
+        raw = b["bank"]
+        items = raw.get("accounts") if isinstance(raw, dict) and "accounts" in raw else [raw]
+        if not isinstance(items, list):
+            return err(400, "Bank accounts must be a list.")
+        accounts = []
+        for it in items:
+            it = it if isinstance(it, dict) else {}
+            bank = clean_text(it.get("bank"), 60)
+            name = clean_text(it.get("accountName"), 80)
+            number = re.sub(r"\s", "", clean_text(it.get("accountNumber"), 20))
+            if not (bank or name or number):
+                continue  # an empty row is simply dropped
+            if not (bank and name and number):
+                return err(
+                    400,
+                    "Enter the bank, account name and account number together, or clear all three.",
+                )
+            if not re.fullmatch(r"\d{10}", number):
+                return err(400, "A Nigerian account number has exactly 10 digits.")
+            accounts.append({"bank": bank, "accountName": name, "accountNumber": number})
+        if len(accounts) > catalogue.MAX_BANK_ACCOUNTS:
+            return err(400, f"You can list up to {catalogue.MAX_BANK_ACCOUNTS} bank accounts.")
+        seen = set()
+        for a_ in accounts:
+            key = (a_["bank"].lower(), a_["accountNumber"])
+            if key in seen:
+                return err(400, f"{a_['bank']} {a_['accountNumber']} is listed twice.")
+            seen.add(key)
+        await db.set_setting("bank_details", {"accounts": accounts})
         await db.add_audit(
             auth.actor_name(request),
             "bank_details_changed",
             "settings",
-            {"bank": bank, "accountNumberEnding": number[-4:]},
+            {
+                "accounts": [
+                    {"bank": x["bank"], "accountNumberEnding": x["accountNumber"][-4:]}
+                    for x in accounts
+                ]
+            },
         )
     if "social" in b:
         raw = b["social"] if isinstance(b["social"], dict) else {}

@@ -145,7 +145,7 @@ def test_bank_details_are_admin_set_validated_and_audited(shop):
     assert r.json()["bank"]["ready"] is True
     log = shop.get("/api/store/admin/audit?subject=settings", headers=STAFF).json()["entries"]
     e = next(x for x in log if x["action"] == "bank_details_changed")
-    assert e["detail"]["accountNumberEnding"] == "6789"
+    assert e["detail"]["accounts"] == [{"bank": "GTBank", "accountNumberEnding": "6789"}]
     assert "0123456789" not in str(e), "the full account number must not be written to the log"
 
 
@@ -211,3 +211,94 @@ def test_the_storefront_scripts_have_no_simulated_payment_code():
         "runcardpaymentflow",
     ):
         assert banned not in text, f"front end still contains '{banned}'"
+
+
+TWO = {
+    "accounts": [
+        {
+            "bank": "PalmPay",
+            "accountName": "Onwe Christian Okwudiri",
+            "accountNumber": "8130055678",
+        },
+        {
+            "bank": "Opay Bank",
+            "accountName": "Onwe Christian Okwudiri",
+            "accountNumber": "8130055678",
+        },
+    ]
+}
+
+
+def test_two_bank_accounts_can_be_saved_and_are_shown_in_order(shop):
+    r = shop.put("/api/store/admin/settings", json={"bank": TWO}, headers=STAFF)
+    assert r.status_code == 200
+    b = r.json()["bank"]
+    assert b["ready"] is True and [a["bank"] for a in b["accounts"]] == ["PalmPay", "Opay Bank"]
+    assert b["bank"] == "PalmPay" and b["accountNumber"] == "8130055678", (
+        "first account stays top-level"
+    )
+    page = shop.get("/").text
+    assert "PalmPay" in page and "Opay Bank" in page and "8130055678" in page
+    assert "Onwe Christian Okwudiri" in page
+
+
+def test_bank_accounts_log_only_the_last_four_digits(shop):
+    shop.put("/api/store/admin/settings", json={"bank": TWO}, headers=STAFF)
+    log = shop.get("/api/store/admin/audit?subject=settings", headers=STAFF).json()["entries"]
+    e = next(x for x in log if x["action"] == "bank_details_changed")
+    assert [a["accountNumberEnding"] for a in e["detail"]["accounts"]] == ["5678", "5678"]
+    assert "8130055678" not in str(e)
+
+
+def test_a_fourth_account_and_a_duplicate_are_refused(shop):
+    many = {
+        "accounts": [
+            {"bank": f"Bank{i}", "accountName": "N", "accountNumber": f"01234567{i:02d}"}
+            for i in range(4)
+        ]
+    }
+    assert (
+        shop.put("/api/store/admin/settings", json={"bank": many}, headers=STAFF).status_code == 400
+    )
+    dup = {"accounts": [TWO["accounts"][0], TWO["accounts"][0]]}
+    assert (
+        shop.put("/api/store/admin/settings", json={"bank": dup}, headers=STAFF).status_code == 400
+    )
+
+
+def test_one_half_filled_account_in_a_list_is_refused_but_empty_rows_are_dropped(shop):
+    half = {
+        "accounts": [
+            TWO["accounts"][0],
+            {"bank": "Opay Bank", "accountName": "", "accountNumber": ""},
+        ]
+    }
+    assert (
+        shop.put("/api/store/admin/settings", json={"bank": half}, headers=STAFF).status_code == 400
+    )
+    blank = {"accounts": [TWO["accounts"][0], {"bank": "", "accountName": "", "accountNumber": ""}]}
+    r = shop.put("/api/store/admin/settings", json={"bank": blank}, headers=STAFF)
+    assert r.status_code == 200 and len(r.json()["bank"]["accounts"]) == 1
+
+
+def test_clearing_all_accounts_turns_pay_ahead_off(shop):
+    shop.put("/api/store/admin/settings", json={"bank": TWO}, headers=STAFF)
+    r = shop.put("/api/store/admin/settings", json={"bank": {"accounts": []}}, headers=STAFF)
+    assert (
+        r.status_code == 200
+        and r.json()["bank"]["ready"] is False
+        and r.json()["bank"]["accounts"] == []
+    )
+
+
+def test_an_account_saved_the_old_single_way_still_works(shop):
+    run(
+        __import__("app.db", fromlist=["db"]).set_setting(
+            "bank_details",
+            {"bank": "Old Bank", "accountName": "Old Name", "accountNumber": "0123456789"},
+        )
+    )
+    b = shop.get("/api/store/admin/settings", headers=STAFF).json()["bank"]
+    assert b["ready"] is True and b["accounts"] == [
+        {"bank": "Old Bank", "accountName": "Old Name", "accountNumber": "0123456789"}
+    ]

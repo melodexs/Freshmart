@@ -520,20 +520,28 @@ async function settings(root) {
     h("input", { value: a.eta, maxlength: "40", placeholder: "Time, e.g. 1-2 hours (optional)", "aria-label": "Estimated delivery time", oninput: (e) => (a.eta = e.target.value) }),
     h("button", { type: "button", class: "btn sm danger", "aria-label": "Remove area", onclick: () => { if (areas.length > 1) { areas.splice(i, 1); drawAreas(); } }, text: "✕" }))));
   drawAreas();
+  const accts = (s.bank.accounts && s.bank.accounts.length ? s.bank.accounts : [{ bank: "", accountName: "", accountNumber: "" }]).map((a) => ({ ...a }));
+  const acctBox = h("div", {});
+  const drawAccts = () => acctBox.replaceChildren(...accts.map((a, i) => h("div", { class: "panel", style: "margin:8px 0;padding:10px" },
+    h("input", { value: a.bank, maxlength: "60", placeholder: "Bank, e.g. PalmPay", "aria-label": "Bank " + (i + 1), oninput: (e) => (a.bank = e.target.value) }),
+    h("input", { value: a.accountName, maxlength: "80", placeholder: "Account name", "aria-label": "Account name " + (i + 1), oninput: (e) => (a.accountName = e.target.value) }),
+    h("input", { value: a.accountNumber, maxlength: "13", inputmode: "numeric", placeholder: "Account number (10 digits)", "aria-label": "Account number " + (i + 1), oninput: (e) => (a.accountNumber = e.target.value) }),
+    accts.length > 1 ? h("button", { type: "button", class: "btn sm danger", "aria-label": "Remove account " + (i + 1), onclick: () => { accts.splice(i, 1); drawAccts(); }, text: "Remove" }) : null)));
+  drawAccts();
   const form = h("form", { class: "form panel", onsubmit: async (e) => {
     e.preventDefault(); msg.textContent = "";
     const body = { storeName: $("#sName").value, banner: $("#sBanner").value, whatsapp: $("#sWa").value, contactPhone: $("#sPhone").value,
       social: Object.fromEntries(Object.keys(s.socialNetworks).map((k) => [k, $("#soc_" + k).value])),
       areas: areas.map((a) => ({ name: a.name, fee: a.fee === "" ? "" : Number(a.fee), eta: a.eta })),
-      bank: { bank: $("#sBank").value, accountName: $("#sAcctName").value, accountNumber: $("#sAcctNo").value } };
+      bank: { accounts: accts.map((a) => ({ bank: a.bank, accountName: a.accountName, accountNumber: a.accountNumber })) } };
     try { await api("/settings", { method: "PUT", body }); toast("Settings saved"); } catch (err) { msg.textContent = err.message; }
   } },
     h("h2", { text: "Delivery areas and fees" }),
     h("p", { class: "muted", text: "Customers choose one of these at checkout, and the fee is looked up on the server. The first area is the default." }),
     areaBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (areas.length < 40) { areas.push({ name: "", fee: "", eta: "" }); drawAreas(); } }, text: "+ Add area" }),
-    h("h2", { style: "margin-top:18px", text: "Bank account for pay-before-delivery" }),
-    h("p", { class: "muted", text: s.bank.ready ? "Customers can pay by bank transfer to this account." : "Pay-before-delivery is OFF until you enter your real account. Nothing is shown to customers until all three fields are filled." }),
-    inp("sBank", "Bank", s.bank.bank, { maxlength: "60" }), inp("sAcctName", "Account name", s.bank.accountName, { maxlength: "80" }), inp("sAcctNo", "Account number (10 digits)", s.bank.accountNumber, { inputmode: "numeric", maxlength: "13" }),
+    h("h2", { style: "margin-top:18px", text: "Bank accounts for pay-before-delivery" }),
+    h("p", { class: "muted", text: s.bank.ready ? "Customers can pay by bank transfer to any of these accounts." : "Pay-before-delivery is OFF until you enter a real account. Nothing is shown to customers until bank, account name and account number are all filled." }),
+    acctBox, h("button", { type: "button", class: "btn sm", onclick: () => { if (accts.length < 3) { accts.push({ bank: "", accountName: "", accountNumber: "" }); drawAccts(); } }, text: "+ Add another account (up to 3)" }),
     h("h2", { style: "margin-top:18px", text: "Store details" }),
     inp("sName", "Store name", s.storeName, { maxlength: "80" }), inp("sBanner", "Promotional banner text (optional)", s.banner, { maxlength: "200" }),
     inp("sWa", "WhatsApp number", s.whatsapp, { placeholder: "0801 234 5678" }), inp("sPhone", "Contact phone", s.contactPhone, { placeholder: "0801 234 5678" }),

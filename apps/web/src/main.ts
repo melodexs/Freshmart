@@ -206,12 +206,22 @@ function showOrderPlaced(order: PlacedOrder): void {
   text.append("Order ", h("strong", { text: order.id }), ` for ${money(order.total)} was placed.`, h("br"));
   if (order.payMethod === "before") {
     const b = getBank();
+    const accounts = b.accounts.length ? b.accounts : [b];
     text.append(
       "It is waiting for your payment. Transfer ",
       h("strong", { text: money(order.total) }),
-      " to ",
-      h("strong", { text: `${b.accountNumber}, ${b.bank} (${b.accountName})` }),
-      " and use ",
+      accounts.length > 1 ? " to any one of these accounts:" : " to ",
+    );
+    if (accounts.length > 1) {
+      text.append(h("br"));
+      accounts.forEach((a) => {
+        text.append(h("strong", { text: `${a.accountNumber}, ${a.bank} (${a.accountName})` }), h("br"));
+      });
+    } else {
+      text.append(h("strong", { text: `${b.accountNumber}, ${b.bank} (${b.accountName})` }));
+    }
+    text.append(
+      " Use ",
       h("strong", { text: order.id }),
       " as the narration. We start packing as soon as we confirm the money.",
     );
@@ -257,7 +267,7 @@ function init(): void {
     const parsed = JSON.parse(cfg) as {
       deliveryFee?: number;
       areas?: { name: string; fee: number; eta?: string }[];
-      bank?: { bank: string; accountName: string; accountNumber: string; ready: boolean };
+      bank?: { bank: string; accountName: string; accountNumber: string; accounts: { bank: string; accountName: string; accountNumber: string }[]; ready: boolean };
     };
     if (typeof parsed.deliveryFee === "number") setDeliveryFee(parsed.deliveryFee);
     if (parsed.areas?.length) setAreas(parsed.areas);
