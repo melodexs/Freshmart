@@ -13,7 +13,17 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .. import auth, catalogue, config, db, order_status, ratelimit, social, templating
+from .. import (
+    auth,
+    catalogue,
+    config,
+    db,
+    monnify,
+    order_status,
+    ratelimit,
+    social,
+    templating,
+)
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
 from .reviews import bought_and_received, public, summarise
@@ -122,6 +132,7 @@ async def home(request: Request):
         delivery_fee=await catalogue.delivery_fee(),
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
+        monnify_ready=monnify.is_ready(),
         contact_phone=await db.get_setting("contact_phone", ""),
         social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
@@ -272,6 +283,7 @@ async def product_page(request: Request, product_id: str):
         delivery_fee=await catalogue.delivery_fee(),
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
+        monnify_ready=monnify.is_ready(),
         contact_phone=await db.get_setting("contact_phone", ""),
         social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(

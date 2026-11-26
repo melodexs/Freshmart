@@ -446,6 +446,63 @@ async def confirm_payment(order_id: str, expected_from: str, new_status: str, re
     return res.endswith(" 1")
 
 
+async def merge_payment_detail(
+    order_id: str, patch: dict, only_if_absent: str | None = None
+) -> bool:
+    """Merge keys into an order's payment_detail JSON. One statement, so two callers cannot
+    interleave. With only_if_absent the update happens only when that key is missing yet, which
+    is how a one-off action (releasing stock) is claimed exactly once."""
+    async with _pool.acquire() as c:
+        if only_if_absent:
+            res = await c.execute(
+                """UPDATE orders SET payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $2::jsonb
+                   WHERE id=$1 AND NOT (COALESCE(payment_detail,'{}'::jsonb) ? $3)""",
+                order_id,
+                json.dumps(patch),
+                only_if_absent,
+            )
+        else:
+            res = await c.execute(
+                """UPDATE orders SET payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $2::jsonb
+                   WHERE id=$1""",
+                order_id,
+                json.dumps(patch),
+            )
+    return res.endswith(" 1")
+
+
+async def get_order_by_payment_reference(reference: str):
+    """The order a Monnify payment reference belongs to, or None."""
+    async with _pool.acquire() as c:
+        r = await c.fetchrow(
+            """SELECT * FROM orders
+               WHERE payment_detail->'monnify'->>'paymentReference' = $1
+               ORDER BY date DESC LIMIT 1""",
+            reference,
+        )
+    return _order(r) if r else None
+
+
+async def mark_paid_verified(
+    order_id: str, expected_from: str, new_status: str, record: dict
+) -> bool:
+    """Move an order to paid only if it is still awaiting payment, storing the verified record.
+
+    The status check and the write are one statement, so a duplicate webhook, a concurrent poll
+    and an admin confirmation can never all succeed."""
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """UPDATE orders SET status=$3,
+                 payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $4::jsonb
+               WHERE id=$1 AND status=$2""",
+            order_id,
+            expected_from,
+            new_status,
+            json.dumps(record),
+        )
+    return res.endswith(" 1")
+
+
 async def get_favourites(email: str) -> list[str]:
     async with _pool.acquire() as c:
         rows = await c.fetch(

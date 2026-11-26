@@ -277,6 +277,52 @@ async def confirm_payment(order_id: str, expected_from: str, new_status: str, re
         return False
 
 
+async def merge_payment_detail(
+    order_id: str, patch: dict, only_if_absent: str | None = None
+) -> bool:
+    """JSON-store twin of the Postgres merge. Same contract, same one-shot guarantee."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            if only_if_absent and only_if_absent in detail:
+                return False
+            detail.update(patch)
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
+
+
+async def get_order_by_payment_reference(reference: str):
+    with _lock:
+        for o in _read()["orders"]:
+            attempt = (o.get("paymentDetail") or {}).get("monnify") or {}
+            if attempt.get("paymentReference") == reference:
+                return o
+        return None
+
+
+async def mark_paid_verified(
+    order_id: str, expected_from: str, new_status: str, record: dict
+) -> bool:
+    """Move an order to paid only if it is still awaiting payment."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            if o["status"] != expected_from:
+                return False
+            o["status"] = new_status
+            o["paymentDetail"] = {**(o.get("paymentDetail") or {}), **record}
+            _write(data)
+            return True
+        return False
+
+
 async def get_favourites(email: str) -> list[str]:
     with _lock:
         return list(_read()["favourites"].get(email, []))

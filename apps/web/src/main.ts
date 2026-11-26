@@ -7,9 +7,18 @@ import {
   setCheckoutHandler,
   setDeliveryFee,
 } from "./cart";
-import { configureCheckout, getBank, initCheckout, openCheckout, setAreas, setBankDetails } from "./checkout";
+import {
+  configureCheckout,
+  getBank,
+  initCheckout,
+  openCheckout,
+  setAreas,
+  setBankDetails,
+  setMonnifyReady,
+} from "./checkout";
+import { showPaymentPanel, stopPaymentPanel } from "./transfer";
 import { $, $maybe, clear, h, hide, money, show } from "./dom";
-import type { PlacedOrder } from "./types";
+import type { MonnifyPayment, PlacedOrder } from "./types";
 
 /** Entry point. The server renders the pages (Jinja + HTMX); this file only
  * handles what needs the browser: the cart, checkout, modals and toasts. */
@@ -200,11 +209,20 @@ function initAuthEvents(): void {
 
 // ---------- order confirmation ----------
 
-function showOrderPlaced(order: PlacedOrder): void {
+function showOrderPlaced(order: PlacedOrder, payment: MonnifyPayment | null = null): void {
   const text = $("confirmText");
   clear(text);
   text.append("Order ", h("strong", { text: order.id }), ` for ${money(order.total)} was placed.`, h("br"));
-  if (order.payMethod === "before") {
+  stopPaymentPanel();
+  if (order.payMethod === "before" && payment) {
+    text.append(
+      "It is waiting for your payment. Transfer ",
+      h("strong", { text: money(order.total) }),
+      " to the one-time account below, using ",
+      h("strong", { text: order.id }),
+      " as the reference. We confirm it automatically.",
+    );
+  } else if (order.payMethod === "before") {
     const b = getBank();
     const accounts = b.accounts.length ? b.accounts : [b];
     text.append(
@@ -235,6 +253,7 @@ function showOrderPlaced(order: PlacedOrder): void {
       copy.textContent = ok ? "Copied ✓" : `Reference: ${order.id}`;
     });
   };
+  if (payment) showPaymentPanel(payment);
   show($("confirmOverlay"));
 }
 
@@ -268,10 +287,12 @@ function init(): void {
       deliveryFee?: number;
       areas?: { name: string; fee: number; eta?: string }[];
       bank?: { bank: string; accountName: string; accountNumber: string; accounts: { bank: string; accountName: string; accountNumber: string }[]; ready: boolean };
+      monnifyReady?: boolean;
     };
     if (typeof parsed.deliveryFee === "number") setDeliveryFee(parsed.deliveryFee);
     if (parsed.areas?.length) setAreas(parsed.areas);
     setBankDetails(parsed.bank);
+    setMonnifyReady(Boolean(parsed.monnifyReady));
   }
   syncSignedIn();
   initModals();
@@ -286,7 +307,10 @@ function init(): void {
     promptSignIn,
     onOrderPlaced: showOrderPlaced,
   });
-  $("confirmClose").onclick = () => hide($("confirmOverlay"));
+  $("confirmClose").onclick = () => {
+    stopPaymentPanel();
+    hide($("confirmOverlay"));
+  };
   rehydrateGrid();
   handleEntryLinks(cartReady);
 }

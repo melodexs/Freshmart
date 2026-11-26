@@ -53,3 +53,33 @@ FIRST_OWNER_PASSWORD = os.environ.get("FIRST_OWNER_PASSWORD", "")
 
 # Hosted Postgres needs SSL. Set PGSSLMODE=disable only for a local, non-SSL database.
 PG_SSL = False if os.environ.get("PGSSLMODE", "").lower() == "disable" else "require"
+
+# ---- Monnify (dynamic bank transfer for "pay before delivery") -------------------
+# Credentials come from the backend environment only. Nothing here is ever sent to a browser.
+MONNIFY_API_KEY = os.environ.get("MONNIFY_API_KEY", "").strip()
+MONNIFY_SECRET_KEY = os.environ.get("MONNIFY_SECRET_KEY", "").strip()
+MONNIFY_CONTRACT_CODE = os.environ.get("MONNIFY_CONTRACT_CODE", "").strip()
+MONNIFY_BASE_URL = os.environ.get("MONNIFY_BASE_URL", "").strip().rstrip("/")
+
+MONNIFY_SANDBOX_URL = "https://sandbox.monnify.com"
+# Deliberately one-way: a production URL stays inert until someone sets this switch on purpose.
+MONNIFY_ALLOW_PRODUCTION = os.environ.get("MONNIFY_ALLOW_PRODUCTION", "").strip().lower() == "true"
+MONNIFY_IS_SANDBOX = MONNIFY_BASE_URL == MONNIFY_SANDBOX_URL
+
+MONNIFY_CONFIGURED = bool(
+    MONNIFY_API_KEY and MONNIFY_SECRET_KEY and MONNIFY_CONTRACT_CODE and MONNIFY_BASE_URL
+)
+# Why Monnify is switched off, in words a human can act on. Empty when it is usable.
+MONNIFY_DISABLED_REASON = ""
+if not MONNIFY_CONFIGURED:
+    MONNIFY_DISABLED_REASON = "Monnify is not configured on this server."
+elif not MONNIFY_IS_SANDBOX and not MONNIFY_ALLOW_PRODUCTION:
+    MONNIFY_DISABLED_REASON = (
+        "Monnify is pointed at a non-sandbox host and production payments are not enabled."
+    )
+MONNIFY_READY = MONNIFY_CONFIGURED and not MONNIFY_DISABLED_REASON
+
+# Dynamic accounts are short-lived (Monnify allows at most 2400 seconds). We treat an account
+# as spent a little early so a customer never transfers into one that dies mid-transfer.
+MONNIFY_ACCOUNT_SECONDS = 2400
+MONNIFY_EXPIRY_MARGIN_SECONDS = 30

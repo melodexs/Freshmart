@@ -18,6 +18,7 @@ from .routes import alerts as alert_routes
 from .routes import auth as auth_routes
 from .routes import newsletter as newsletter_routes
 from .routes import orders as order_routes
+from .routes import payments as payment_routes
 from .routes import products as product_routes
 from .routes import reports as report_routes
 from .routes import reset as reset_routes
@@ -157,6 +158,8 @@ app.include_router(reset_routes.router)
 app.include_router(newsletter_routes.staff_router, prefix="/api/store/admin")
 app.include_router(review_routes.staff_router, prefix="/api/store/admin")
 app.include_router(account_routes.router, prefix="/api/account")
+app.include_router(payment_routes.router, prefix="/api/payments")
+app.include_router(payment_routes.webhook_router, prefix="/api/webhooks")
 app.include_router(ui_routes.router)
 
 

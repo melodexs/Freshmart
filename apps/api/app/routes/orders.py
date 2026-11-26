@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, discounts, order_status, ratelimit
+from .. import auth, catalogue, db, discounts, monnify, order_status, payments, ratelimit
 from ..phone import normalise as normalise_phone
 
 router = APIRouter()
@@ -58,7 +58,11 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         return err(400, "Please enter a valid Nigerian mobile number, like 0801 234 5678.")
     if pay_method not in ("before", "delivery"):
         return err(400, "Please choose a payment method.")
-    if pay_method == "before" and not (await catalogue.bank_details())["ready"]:
+    # Pay before delivery needs somewhere to pay: either the gateway can mint a transfer
+    # account, or the store has published its own bank account for manual transfers.
+    if pay_method == "before" and not (
+        monnify.is_ready() or (await catalogue.bank_details())["ready"]
+    ):
         return err(
             409, "Pay before delivery is not available right now. Please choose pay on delivery."
         )
@@ -169,7 +173,21 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         if product and product.get("stock") is not None:
             await catalogue.log_stock(pid, -q, product["stock"], "Sold", "customer", order["id"])
 
-    return {"order": order}
+    # The order exists and its stock is reserved. Only now do we ask for a transfer account, so a
+    # gateway hiccup can never leave a phantom order behind: on failure the order is cancelled and
+    # its stock released inside attach_account, and the customer is told plainly.
+    payment = None
+    if pay_method == "before" and monnify.is_ready():
+        try:
+            await payments.attach_account(order)
+        except payments.PaymentSetupError as exc:
+            return err(502, str(exc))
+        fresh = await db.get_order(order["id"])
+        if fresh:
+            order = fresh
+        payment = payments.public_view(order)
+
+    return {"order": order, "payment": payment}
 
 
 @router.post("/discount-check")

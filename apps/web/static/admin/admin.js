@@ -310,10 +310,19 @@ function orderRow(o, reload) {
   } }, h("option", { value: "", text: "Move to…" }), next.map((s) => h("option", { value: s, text: s }))) : h("span", { class: "muted", text: "Final" });
   const pay = o.status === "Awaiting payment" ? h("button", { class: "btn sm primary", style: "margin-bottom:6px", onclick: () => confirmPayment(o, reload), text: "Confirm payment" }) : null;
   const paid = o.paymentDetail && o.paymentDetail.paid ? h("div", { class: "muted", text: `Paid ${naira(o.paymentDetail.paidAmount)} by ${o.paymentDetail.paidMethod}, ref ${o.paymentDetail.paidReference}` }) : null;
+  // Monnify transfer details, so staff can match a credit to the order without leaving the page.
+  const m = (o.paymentDetail && o.paymentDetail.monnify) || null;
+  const transfer = m ? h("div", { class: "muted", style: "font-size:.78rem;line-height:1.5" },
+    h("div", { text: `Transfer: ${m.status || "—"}${m.amountPaid ? ` · paid ${naira(m.amountPaid)}` : ""}` }),
+    m.bankName ? h("div", { text: `${m.bankName} · ${m.accountNumber} · ${m.accountName}` }) : null,
+    m.paymentReference ? h("div", { text: `Pay ref ${m.paymentReference}` }) : null,
+    m.transactionReference ? h("div", { text: `Txn ${m.transactionReference}` }) : null,
+    m.paidOn || m.checkedAt ? h("div", { text: `Checked ${m.paidOn || m.checkedAt}` }) : null,
+    m.lastError ? h("div", { text: `Setup failed: ${m.lastError}` }) : null) : null;
   return h("tr", {}, h("td", {}, h("strong", { text: o.id }), h("div", { class: "muted", text: when(o.date) })),
     h("td", {}, o.customerName ? h("div", { text: o.customerName }) : null, h("div", { text: o.phone }), h("div", { class: "muted", text: o.user }), h("div", { class: "muted", text: [o.address, o.city].filter(Boolean).join(", ") }), o.instructions ? h("div", { class: "muted", text: "Note: " + o.instructions }) : null),
     h("td", {}, o.items.map((i) => h("div", { text: `${i.qty}× ${i.name}` }))),
-    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Pay before delivery" : "Pay on delivery" }), paid), h("td", {}, pay, h("div", {}, move), h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => history_(o), text: "History" })));
+    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Pay before delivery" : "Pay on delivery" }), transfer, paid), h("td", {}, pay, h("div", {}, move), h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => history_(o), text: "History" })));
 }
 
 function confirmPayment(o, reload) {

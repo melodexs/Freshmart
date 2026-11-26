@@ -13,7 +13,7 @@ import {
   appliedDiscount,
   total,
 } from "./cart";
-import type { PayMethod, PlacedOrder } from "./types";
+import type { MonnifyPayment, PayMethod, PlacedOrder } from "./types";
 
 /** Three steps: 1 your details, 2 delivery, 3 payment. Prices and the delivery fee are
  * always recalculated by the server; what is shown here is only a preview. */
@@ -24,13 +24,13 @@ let step: Step = 1;
 let selectedPay: PayMethod | null = null;
 let isSignedIn: () => boolean = () => false;
 let promptSignIn: (message: string) => void = () => undefined;
-let onOrderPlaced: (order: PlacedOrder) => void = () => undefined;
+let onOrderPlaced: (order: PlacedOrder, payment: MonnifyPayment | null) => void = () => undefined;
 let placing = false;
 
 export function configureCheckout(opts: {
   isSignedIn: () => boolean;
   promptSignIn: (message: string) => void;
-  onOrderPlaced: (order: PlacedOrder) => void;
+  onOrderPlaced: (order: PlacedOrder, payment: MonnifyPayment | null) => void;
 }): void {
   isSignedIn = opts.isSignedIn;
   promptSignIn = opts.promptSignIn;
@@ -155,6 +155,13 @@ let bank: Bank = { bank: "", accountName: "", accountNumber: "", accounts: [], r
 export function setBankDetails(b: Bank | undefined): void {
   if (b) bank = b;
 }
+
+/** True when the server can mint a one-time Monnify account, so pay-ahead works even with no
+ * published bank account of the store's own. */
+let monnifyReady = false;
+export function setMonnifyReady(ready: boolean): void {
+  monnifyReady = ready;
+}
 export function getBank(): Bank {
   return bank;
 }
@@ -199,6 +206,15 @@ function renderPayPanel(): void {
   clear(panel);
   panel.hidden = selectedPay !== "before";
   if (selectedPay !== "before") return;
+  if (monnifyReady) {
+    panel.append(
+      h("div", {
+        class: "small-note",
+        text: "After you place the order we create a one-time account number for it. Transfer the exact amount to that account within 40 minutes, and your order is confirmed automatically.",
+      }),
+    );
+    return;
+  }
   if (!bank.ready) {
     panel.append(
       h("div", {
@@ -259,7 +275,8 @@ async function placeOrder(): Promise<void> {
     }
   }
   if (!selectedPay) return msg("Please choose how you would like to pay.");
-  if (selectedPay === "before" && !bank.ready) return msg("Pay before delivery is not available right now.");
+  if (selectedPay === "before" && !bank.ready && !monnifyReady)
+    return msg("Pay before delivery is not available right now.");
 
   const items = lines().map((l) => {
     const [productId, optionIndex] = l.key.split("|");
@@ -270,19 +287,22 @@ async function placeOrder(): Promise<void> {
   btn.disabled = true;
   btn.textContent = "Placing your order…";
   try {
-    const data = await postJson<{ order: PlacedOrder; bank?: Bank }>("/api/orders", {
-      items,
-      name: val("coName"),
-      address: val("coAddress"),
-      phone: val("coPhone"),
-      city: val("coArea"),
-      instructions: val("coNote"),
-      payMethod: selectedPay,
-      discountCode: appliedDiscount()?.code ?? "",
-    });
+    const data = await postJson<{ order: PlacedOrder; payment?: MonnifyPayment | null }>(
+      "/api/orders",
+      {
+        items,
+        name: val("coName"),
+        address: val("coAddress"),
+        phone: val("coPhone"),
+        city: val("coArea"),
+        instructions: val("coNote"),
+        payMethod: selectedPay,
+        discountCode: appliedDiscount()?.code ?? "",
+      },
+    );
     clearCart();
     hide($("checkoutOverlay"));
-    onOrderPlaced(data.order);
+    onOrderPlaced(data.order, data.payment ?? null);
   } catch (err) {
     msg(errorMessage(err, "Couldn't place your order. Please try again."));
   } finally {
