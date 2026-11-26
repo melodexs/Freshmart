@@ -858,13 +858,24 @@ def test_unavailable_monnify_cleans_up_the_order(monnify_client, monkeypatch):
 
 def test_last_sync_map_is_pruned():
     """L5: the per-process throttle map must not grow forever."""
+    import time
+
     from app import payments
 
     payments._LAST_SYNC.clear()
+    stale = time.monotonic() - payments._LAST_SYNC_TTL - 60
     for i in range(payments._LAST_SYNC_LIMIT + 50):
-        payments._LAST_SYNC[f"old-{i}"] = 0.0
+        payments._LAST_SYNC[f"old-{i}"] = stale
     payments._prune_last_sync()
     assert len(payments._LAST_SYNC) == 0
+
+    # A fresh entry is kept: pruning must never forget an order that was just checked.
+    payments._LAST_SYNC.clear()
+    for i in range(payments._LAST_SYNC_LIMIT + 50):
+        payments._LAST_SYNC[f"old-{i}"] = stale
+    payments._LAST_SYNC["just-now"] = time.monotonic()
+    payments._prune_last_sync()
+    assert list(payments._LAST_SYNC) == ["just-now"]
 
 
 def test_token_is_refreshed_after_a_401(monkeypatch):
