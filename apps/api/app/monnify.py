@@ -26,6 +26,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import weakref
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -36,11 +37,30 @@ TIMEOUT_SECONDS = 30
 TOKEN_REFRESH_MARGIN = 60
 
 _TOKEN: dict[str, object] = {"value": "", "expires_at": 0.0}
-_TOKEN_LOCK = asyncio.Lock()
+# One lock per event loop. A lock bound to a dead loop (tests, restarts) must never be reused.
+_TOKEN_LOCKS: weakref.WeakKeyDictionary[object, asyncio.Lock] = weakref.WeakKeyDictionary()
+
+
+def _token_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _TOKEN_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _TOKEN_LOCKS[loop] = lock
+    return lock
 
 
 class MonnifyError(Exception):
-    """A Monnify call failed. The message is safe to show to a human, and holds no secrets."""
+    """A Monnify call failed. The message is safe to show a human, and holds no secrets.
+
+    ``transient`` separates "try again in a moment" (network trouble, a 5xx, a timeout) from
+    "this request will never work" (bad contract, rejected payload). The order lifecycle treats
+    the two very differently: a temporary outage must not cancel a customer's order.
+    """
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 def is_ready() -> bool:
@@ -76,9 +96,11 @@ def _request_sync(method: str, url: str, payload: dict | None, headers: dict) ->
     except urllib.error.HTTPError as exc:
         return exc.code, _parse(exc.read().decode(errors="replace"))
     except urllib.error.URLError as exc:
-        raise MonnifyError("Could not reach Monnify. Please try again.") from exc
+        raise MonnifyError("Could not reach Monnify. Please try again.", transient=True) from exc
     except TimeoutError as exc:
-        raise MonnifyError("Monnify did not answer in time. Please try again.") from exc
+        raise MonnifyError(
+            "Monnify did not answer in time. Please try again.", transient=True
+        ) from exc
 
 
 def _parse(body: str) -> dict:
@@ -101,9 +123,16 @@ def _url(path: str, params: dict | None = None) -> str:
     return url
 
 
-async def _send(method: str, path: str, payload: dict | None = None, params: dict | None = None):
+async def _send(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    params: dict | None = None,
+    *,
+    force_auth: bool = False,
+):
     return await run_in_threadpool(
-        _request_sync, method, _url(path, params), payload, await _auth_header()
+        _request_sync, method, _url(path, params), payload, await _auth_header(force_auth)
     )
 
 
@@ -119,7 +148,7 @@ async def access_token(force: bool = False) -> str:
     now = time.monotonic()
     if not force and _TOKEN["value"] and float(_TOKEN["expires_at"]) - TOKEN_REFRESH_MARGIN > now:
         return str(_TOKEN["value"])
-    async with _TOKEN_LOCK:
+    async with _token_lock():
         now = time.monotonic()
         if (
             not force
@@ -213,10 +242,14 @@ async def _checked(
 ) -> dict:
     status, body = await _send(method, path, payload, params)
     if status == 401:
-        # A stale or revoked token: refresh once, then try again.
-        status, body = await _send(method, path, payload, params)
+        # A stale or revoked token: throw the cached one away, sign in again, retry exactly once.
+        reset_token_cache()
+        status, body = await _send(method, path, payload, params, force_auth=True)
     if status != 200 or not body.get("requestSuccessful"):
-        raise MonnifyError(_message(body, f"Monnify could not {what}."))
+        raise MonnifyError(
+            _message(body, f"Monnify could not {what}."),
+            transient=status >= 500 or status == 429,
+        )
     return body
 
 

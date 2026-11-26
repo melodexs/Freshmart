@@ -12,6 +12,7 @@ const POLL_MS = 10_000;
 
 let current: MonnifyPayment | null = null;
 let orderId = "";
+let onStatus: ((payment: MonnifyPayment) => void) | undefined;
 let countdown: number | undefined;
 let poller: number | undefined;
 
@@ -25,6 +26,7 @@ export function stopPaymentPanel(): void {
   countdown = undefined;
   poller = undefined;
   current = null;
+  onStatus = undefined;
   const box = document.getElementById("payPanel");
   if (box) {
     clear(box);
@@ -33,7 +35,8 @@ export function stopPaymentPanel(): void {
 }
 
 function isOpenStatus(status: string): boolean {
-  return status === "PENDING" || status === "CREATING";
+  // A part payment is still open: the customer has to send the balance to the same account.
+  return status === "PENDING" || status === "CREATING" || status === "PARTIALLY_PAID";
 }
 
 function row(label: string, value: string, extra?: HTMLElement): HTMLElement {
@@ -160,14 +163,15 @@ async function fetchStatus(): Promise<MonnifyPayment | null> {
 
 function apply(payment: MonnifyPayment): void {
   render(payment);
-  if (!isOpenStatus(String(payment.status).toUpperCase())) {
+  const status = String(payment.status).toUpperCase();
+  if (!isOpenStatus(status)) {
+    // Nothing left to count down or poll for, whatever the terminal state is.
     if (poller !== undefined) window.clearInterval(poller);
     poller = undefined;
-  }
-  if (String(payment.status).toUpperCase() === "EXPIRED" && countdown !== undefined) {
-    window.clearInterval(countdown);
+    if (countdown !== undefined) window.clearInterval(countdown);
     countdown = undefined;
   }
+  if (onStatus) onStatus(payment);
 }
 
 async function checkNow(button: HTMLButtonElement): Promise<void> {
@@ -221,8 +225,12 @@ function startTimers(): void {
 }
 
 /** Show the account for a freshly placed order and keep it up to date. */
-export function showPaymentPanel(payment: MonnifyPayment): void {
+export function showPaymentPanel(
+  payment: MonnifyPayment,
+  listener?: (payment: MonnifyPayment) => void,
+): void {
   orderId = payment.orderId;
+  onStatus = listener;
   render(payment);
   startTimers();
 }

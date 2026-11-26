@@ -43,6 +43,7 @@ get_audit = _impl.get_audit
 confirm_payment = _impl.confirm_payment
 merge_payment_detail = _impl.merge_payment_detail
 get_order_by_payment_reference = _impl.get_order_by_payment_reference
+drop_payment_detail_keys = _impl.drop_payment_detail_keys
 mark_paid_verified = _impl.mark_paid_verified
 get_favourites = _impl.get_favourites
 add_favourite = _impl.add_favourite

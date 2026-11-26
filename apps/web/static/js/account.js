@@ -130,4 +130,19 @@
 
   var start = (location.hash || "").slice(1);
   load().then(function () { if (["orders", "addresses", "favourites", "profile"].indexOf(start) >= 0) showTab(start); }).catch(function () {});
+
+  // Payment instructions live in the order history too, so an account number is never lost
+  // when the checkout confirmation is closed.
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest("[data-copy-account]") : null;
+    if (!btn) return;
+    var value = btn.getAttribute("data-copy-account") || "";
+    var done = function (ok) {
+      btn.textContent = ok ? "Copied ✓" : "Press and hold the number";
+      window.setTimeout(function () { btn.textContent = "Copy account number"; }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(function () { done(true); }, function () { done(false); });
+    } else { done(false); }
+  });
 })();

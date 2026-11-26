@@ -69,6 +69,8 @@ async def init() -> None:
               id BIGSERIAL PRIMARY KEY, product_id TEXT NOT NULL, change INTEGER NOT NULL,
               after INTEGER, reason TEXT NOT NULL, order_id TEXT, actor TEXT NOT NULL,
               at TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE INDEX IF NOT EXISTS orders_monnify_reference_idx
+              ON orders ((payment_detail->'monnify'->>'paymentReference'));
             CREATE INDEX IF NOT EXISTS stock_moves_product_idx ON stock_moves (product_id, at DESC);
             CREATE TABLE IF NOT EXISTS discount_codes (
               code TEXT PRIMARY KEY, rule JSONB NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -456,7 +458,7 @@ async def merge_payment_detail(
         if only_if_absent:
             res = await c.execute(
                 """UPDATE orders SET payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $2::jsonb
-                   WHERE id=$1 AND NOT (COALESCE(payment_detail,'{}'::jsonb) ? $3)""",
+                   WHERE id=$1 AND NOT (COALESCE(payment_detail,'{}'::jsonb) ? $3::text)""",
                 order_id,
                 json.dumps(patch),
                 only_if_absent,
@@ -472,15 +474,35 @@ async def merge_payment_detail(
 
 
 async def get_order_by_payment_reference(reference: str):
-    """The order a Monnify payment reference belongs to, or None."""
+    """The order a Monnify payment reference belongs to, current attempt or an older one.
+
+    Money can land on an account we have since replaced, so the history is searched too. If a
+    reference somehow appears twice, the most recent order wins.
+    """
     async with _pool.acquire() as c:
         r = await c.fetchrow(
             """SELECT * FROM orders
                WHERE payment_detail->'monnify'->>'paymentReference' = $1
+                  OR COALESCE(payment_detail->'monnify'->'history', '[]'::jsonb)
+                     @> jsonb_build_array(jsonb_build_object('paymentReference', $1::text))
                ORDER BY date DESC LIMIT 1""",
             reference,
         )
     return _order(r) if r else None
+
+
+async def drop_payment_detail_keys(order_id: str, keys: list[str]) -> bool:
+    """Remove keys from an order's payment_detail, atomically (the attempt lock uses this)."""
+    if not keys:
+        return False
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """UPDATE orders SET payment_detail = COALESCE(payment_detail,'{}'::jsonb) - $2::text[]
+               WHERE id=$1""",
+            order_id,
+            list(keys),
+        )
+    return res.endswith(" 1")
 
 
 async def mark_paid_verified(

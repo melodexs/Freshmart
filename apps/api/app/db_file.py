@@ -297,12 +297,34 @@ async def merge_payment_detail(
 
 
 async def get_order_by_payment_reference(reference: str):
+    """Current attempt first, then every earlier one: a late payment must still find its order."""
     with _lock:
         for o in _read()["orders"]:
             attempt = (o.get("paymentDetail") or {}).get("monnify") or {}
             if attempt.get("paymentReference") == reference:
                 return o
+            for entry in attempt.get("history") or []:
+                if isinstance(entry, dict) and entry.get("paymentReference") == reference:
+                    return o
         return None
+
+
+async def drop_payment_detail_keys(order_id: str, keys: list[str]) -> bool:
+    """JSON-store twin of the Postgres key removal (the attempt lock uses this)."""
+    if not keys:
+        return False
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            for key in keys:
+                detail.pop(key, None)
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
 
 
 async def mark_paid_verified(

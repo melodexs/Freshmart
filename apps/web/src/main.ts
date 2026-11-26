@@ -226,9 +226,9 @@ function showOrderPlaced(order: PlacedOrder, payment: MonnifyPayment | null = nu
     const b = getBank();
     const accounts = b.accounts.length ? b.accounts : [b];
     text.append(
-      "It is waiting for your payment. Transfer ",
+      "Pay ",
       h("strong", { text: money(order.total) }),
-      accounts.length > 1 ? " to any one of these accounts:" : " to ",
+      accounts.length > 1 ? " to any one of these accounts:" : " to the account below. ",
     );
     if (accounts.length > 1) {
       text.append(h("br"));
@@ -253,7 +253,18 @@ function showOrderPlaced(order: PlacedOrder, payment: MonnifyPayment | null = nu
       copy.textContent = ok ? "Copied ✓" : `Reference: ${order.id}`;
     });
   };
-  if (payment) showPaymentPanel(payment);
+  if (payment) {
+    showPaymentPanel(payment, (latest) => {
+      const status = String(latest.status).toUpperCase();
+      if (status !== "PAID" && status !== "OVERPAID") return;
+      clear(text);
+      text.append(
+        "Payment received for order ",
+        h("strong", { text: order.id }),
+        `. Your order is confirmed and we are preparing it for delivery.`,
+      );
+    });
+  }
   show($("confirmOverlay"));
 }
 
