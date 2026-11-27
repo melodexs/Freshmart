@@ -641,3 +641,10 @@ footer{background:var(--green-900); color:var(--cream); padding:24px 0; text-ali
 #productGrid:not(.pdp-grid) .note-input{position:absolute;right:0;bottom:calc(100% + 6px);z-index:4;width:min(220px,70vw);background:#fff;box-shadow:0 6px 16px rgba(18,40,29,.16)}
 #productGrid:not(.pdp-grid) .off-badge.corner{top:8px;left:8px}
 @media(prefers-reduced-motion:reduce){#productGrid:not(.pdp-grid) .add-btn:hover{transform:none}}
+.pay-panel{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--cream);font-size:.86rem}
+.pay-status{font-weight:700;font-size:.78rem;text-transform:uppercase;color:#5c6b60}
+.pay-status.paid{color:#1f6b3a}
+.pay-status.expired,.pay-status.failed{color:var(--danger)}
+.pay-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0}
+.pay-account{letter-spacing:.06em}
+.pay-expiry{margin:8px 0;font-size:.8rem;opacity:.8}

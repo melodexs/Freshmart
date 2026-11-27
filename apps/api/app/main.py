@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,7 +12,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import auth, catalogue, config, db
+from . import auth, catalogue, config, db, payments
 from .routes import account as account_routes
 from .routes import admin as admin_routes
 from .routes import admins as admins_routes
@@ -18,6 +20,7 @@ from .routes import alerts as alert_routes
 from .routes import auth as auth_routes
 from .routes import newsletter as newsletter_routes
 from .routes import orders as order_routes
+from .routes import payments as payment_routes
 from .routes import products as product_routes
 from .routes import reports as report_routes
 from .routes import reset as reset_routes
@@ -42,7 +45,18 @@ async def lifespan(app: FastAPI):
         print(f"Catalogue was empty: loaded {seeded} starter products")
     mode = "Postgres" if config.USE_POSTGRES else "local JSON file"
     print(f"OGS backend (Python) running, data store: {mode}")
-    yield
+    # Expire abandoned payment reservations without waiting for the customer to come back.
+    # This is an in-process task: it runs in this worker for as long as the app runs, and the
+    # sweep is idempotent, so extra instances or an overlapping request are harmless.
+    stop = asyncio.Event()
+    sweeper = asyncio.create_task(payments.reservation_sweeper(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        sweeper.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await sweeper
 
 
 app = FastAPI(title="OGS API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -157,6 +171,8 @@ app.include_router(reset_routes.router)
 app.include_router(newsletter_routes.staff_router, prefix="/api/store/admin")
 app.include_router(review_routes.staff_router, prefix="/api/store/admin")
 app.include_router(account_routes.router, prefix="/api/account")
+app.include_router(payment_routes.router, prefix="/api/payments")
+app.include_router(payment_routes.webhook_router, prefix="/api/webhooks")
 app.include_router(ui_routes.router)
 
 

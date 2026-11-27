@@ -45,6 +45,7 @@ To make payments real, integrate Paystack or Flutterwave. To make SMS real, use 
 - [Deployment](docs/deployment.md): Render setup and environment variables
 - [Security notes](docs/security.md): what is protected and known limits
 - [Orders, tracking and cancellation](docs/orders.md): statuses, cancel, tracking
+- [Payments](docs/payments.md): Monnify transfers, money accounting, the reservation sweeper
 - [Contributing](CONTRIBUTING.md): workflow and conventions
 
 ## License

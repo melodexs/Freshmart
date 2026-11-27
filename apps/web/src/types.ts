@@ -34,6 +34,23 @@ export interface CartLine {
 
 export type PayMethod = "delivery" | "before";
 
+/** A one-time Monnify transfer account, mirroring payments.public_view on the server. */
+export interface MonnifyPayment {
+  orderId: string;
+  status: string;
+  bank: string;
+  bankCode?: string;
+  accountName: string;
+  accountNumber: string;
+  amount: number;
+  paymentReference: string;
+  transactionReference: string;
+  expiresOn: string;
+  secondsLeft: number;
+  amountPaid?: number | null;
+  message: string;
+}
+
 export type PaymentDetail =
   | { type: "card"; last4: string }
   | { type: "transfer"; bank: string }

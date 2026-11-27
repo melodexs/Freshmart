@@ -128,6 +128,55 @@
     } catch (err) { notice("Sorry, we couldn't add those items to your cart.", true); }
   });
 
+  // Ask for a replacement transfer account from the order history, then reload the list.
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest ? ev.target.closest("[data-reissue-account]") : null;
+    if (!btn || btn.disabled) return;
+    var id = btn.getAttribute("data-reissue-account");
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Creating a new account\u2026";
+    fetch("/api/payments/" + encodeURIComponent(id) + "/new-account", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (out) {
+        if (!out.ok || !out.data || !out.data.payment) {
+          throw new Error((out.data && out.data.error) || "Could not create a new account.");
+        }
+        btn.textContent = "New account ready";
+        if (window.htmx) {
+          window.htmx.ajax("GET", "/ui/orders", { target: "#ordersHost", swap: "innerHTML" });
+        } else {
+          location.reload();
+        }
+      })
+      .catch(function (err) {
+        btn.disabled = false;
+        btn.textContent = label;
+        notice(err.message || "Could not create a new account.", true);
+      });
+  });
+
   var start = (location.hash || "").slice(1);
   load().then(function () { if (["orders", "addresses", "favourites", "profile"].indexOf(start) >= 0) showTab(start); }).catch(function () {});
+
+  // Payment instructions live in the order history too, so an account number is never lost
+  // when the checkout confirmation is closed.
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest("[data-copy-account]") : null;
+    if (!btn) return;
+    var value = btn.getAttribute("data-copy-account") || "";
+    var done = function (ok) {
+      btn.textContent = ok ? "Copied ✓" : "Press and hold the number";
+      window.setTimeout(function () { btn.textContent = "Copy account number"; }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(function () { done(true); }, function () { done(false); });
+    } else { done(false); }
+  });
 })();

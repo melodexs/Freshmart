@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from .. import auth, catalogue, db, discounts, images, order_status, social
+from .. import auth, catalogue, db, discounts, images, order_status, payments, social
 from .products import with_photo
 
 MEDIA_RE = re.compile(r"/media/im[0-9a-f]{16}")
@@ -401,6 +401,13 @@ async def set_order_status(order_id: str, request: Request):
     new = clean_text((await body_of(request)).get("status"), 80)
     if new not in order_status.staff_options(o["status"]):
         return err(409, f"An order that is '{o['status']}' cannot move to '{new}'.")
+    # Money first: an unresolved discrepancy blocks fulfilment here, not just in the admin UI.
+    if order_status.is_fulfilment(new) and payments.has_open_discrepancy(o):
+        return err(
+            409,
+            "This order has an unresolved payment discrepancy. Resolve it before moving the "
+            "order forward.",
+        )
     ok = await db.update_order_status(order_id, new, allowed_from=[o["status"]])
     if not ok:
         return err(409, "That order was just changed by someone else. Please refresh.")
@@ -412,6 +419,78 @@ async def set_order_status(order_id: str, request: Request):
             o, "Order cancelled by admin", auth.actor_name(request)
         )  # gives the reserved stock back
     return {"order": await db.get_order(order_id)}
+
+
+@router.post("/orders/{order_id}/resolve-payment")
+async def resolve_payment(order_id: str, request: Request):
+    """Close a payment discrepancy once a human has actually dealt with it.
+
+    An overpaid order carries needsReconciliation and cannot move forward until someone says how
+    the excess was handled, so money received twice is never quietly absorbed.
+    """
+    o = await db.get_order(order_id)
+    if not o:
+        return err(404, "That order does not exist.")
+    detail = o.get("paymentDetail") or {}
+    issues = [i for i in (detail.get("reconciliationIssues") or []) if isinstance(i, dict)]
+    open_issues = payments.open_issues(o)
+    if not open_issues:
+        return err(409, "This order has no payment discrepancy to resolve.")
+    if not issues:
+        # Flagged by the earlier single-slot code: adopt it into the list so it can be closed.
+        issues = [dict(i) for i in open_issues]
+    b = await body_of(request)
+    note = clean_text(b.get("note"), 200)
+    if not note:
+        return err(400, "Say how the discrepancy was handled, so the record is complete.")
+    wanted = clean_text(b.get("issueId"), 60)
+    target = open_issues[0]
+    if wanted:
+        match = next((i for i in open_issues if str(i.get("id") or "") == wanted), None)
+        if match is None:
+            return err(404, "That discrepancy is not open on this order.")
+        target = match
+    who = auth.actor_name(request)
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    resolved = {
+        **target,
+        "resolved": True,
+        "resolvedAt": now,
+        "resolvedBy": who,
+        "resolutionNote": note,
+    }
+    updated = [
+        resolved if str(i.get("id") or "") == str(target.get("id") or "") else i for i in issues
+    ]
+    remaining = [i for i in updated if not i.get("resolved")]
+    await db.merge_payment_detail(
+        order_id,
+        {
+            "reconciliationIssues": updated,
+            "needsReconciliation": remaining[0] if remaining else None,
+            "reconciliationResolved": {
+                "by": who,
+                "at": now,
+                "note": note,
+                "was": target,
+            },
+        },
+    )
+    await db.add_audit(
+        who,
+        "payment_discrepancy_resolved",
+        order_id,
+        {
+            "issueId": target.get("id"),
+            "reason": target.get("reason"),
+            "overpaidBy": target.get("overpaidBy"),
+            "amountPaid": target.get("amountPaid"),
+            "orderTotal": target.get("orderTotal"),
+            "note": note,
+            "stillOpen": len(remaining),
+        },
+    )
+    return {"order": await db.get_order(order_id), "openIssues": len(remaining)}
 
 
 PAY_METHODS = {"bank transfer", "ussd", "cash", "pos", "other"}

@@ -277,6 +277,111 @@ async def confirm_payment(order_id: str, expected_from: str, new_status: str, re
         return False
 
 
+async def merge_payment_detail(
+    order_id: str, patch: dict, only_if_absent: str | None = None
+) -> bool:
+    """JSON-store twin of the Postgres merge. Same contract, same one-shot guarantee."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            if only_if_absent and only_if_absent in detail:
+                return False
+            detail.update(patch)
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
+
+
+async def get_order_by_payment_reference(reference: str):
+    """Current attempt first, then every earlier one: a late payment must still find its order."""
+    with _lock:
+        for o in _read()["orders"]:
+            attempt = (o.get("paymentDetail") or {}).get("monnify") or {}
+            if attempt.get("paymentReference") == reference:
+                return o
+            for entry in attempt.get("history") or []:
+                if isinstance(entry, dict) and entry.get("paymentReference") == reference:
+                    return o
+        return None
+
+
+async def drop_payment_detail_keys(order_id: str, keys: list[str]) -> bool:
+    """JSON-store twin of the Postgres key removal (the attempt lock uses this)."""
+    if not keys:
+        return False
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            for key in keys:
+                detail.pop(key, None)
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
+
+
+async def takeover_payment_lock(order_id: str, observed_token: str, lock: dict) -> bool:
+    """Replace a stale attempt lock only if it is still the lock we inspected."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            held = detail.get("paymentAttemptLock") or {}
+            if str(held.get("token") or "") != observed_token:
+                return False
+            detail["paymentAttemptLock"] = lock
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
+
+
+async def list_orders_with_stale_reservations(status: str, now_epoch: float, limit: int = 50):
+    """Orders whose payment-setup reservation has run out and still hold their stock."""
+    found = []
+    with _lock:
+        for o in _read()["orders"]:
+            if o.get("status") != status:
+                continue
+            detail = o.get("paymentDetail") or {}
+            try:
+                until = float(detail.get("reservationExpiresAtEpoch") or 0)
+            except (TypeError, ValueError):
+                continue
+            if until and until <= now_epoch:
+                found.append(o)
+            if len(found) >= limit:
+                break
+    return found
+
+
+async def mark_paid_verified(
+    order_id: str, expected_from: str, new_status: str, record: dict
+) -> bool:
+    """Move an order to paid only if it is still awaiting payment."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            if o["status"] != expected_from:
+                return False
+            o["status"] = new_status
+            o["paymentDetail"] = {**(o.get("paymentDetail") or {}), **record}
+            _write(data)
+            return True
+        return False
+
+
 async def get_favourites(email: str) -> list[str]:
     with _lock:
         return list(_read()["favourites"].get(email, []))

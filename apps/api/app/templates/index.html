@@ -165,5 +165,5 @@
 <div id="successToast" class="toast toast-ok" role="status" style="display:none;"></div>
 
 {% include "partials/modals.html" %}
-<script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee, "areas": areas, "bank": bank}|tojson }}</script>
+<script id="app-config" type="application/json">{{ {"deliveryFee": delivery_fee, "areas": areas, "bank": bank, "monnifyReady": monnify_ready}|tojson }}</script>
 {% endblock %}

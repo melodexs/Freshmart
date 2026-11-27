@@ -45,6 +45,11 @@ CUSTOMER_CAN_CANCEL_FROM = [
 
 ALL = [AWAITING_PAYMENT, PAID, AWAITING, PREPARING, READY, OUT, DELIVERED, CANCELLED]
 
+# Statuses that mean the shop has committed to packing and sending the order. An unresolved
+# payment discrepancy blocks these, whether the request came from the admin UI or a direct API
+# call. "Cancelled" is not fulfilment: it is the safe direction and stays available.
+FULFILMENT = [PREPARING, READY, OUT, DELIVERED]
+
 # Rough progress for the tracking bar (0 to 100). Cancelled has none.
 PROGRESS = {
     AWAITING_PAYMENT: 5,
@@ -56,6 +61,10 @@ PROGRESS = {
     DELIVERED: 100,
     CANCELLED: 0,
 }
+
+
+def is_fulfilment(target: str) -> bool:
+    return target in FULFILMENT
 
 
 def staff_options(current: str) -> list[str]:

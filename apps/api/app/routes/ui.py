@@ -13,7 +13,18 @@ from fastapi import APIRouter, Form, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from .. import auth, catalogue, config, db, order_status, ratelimit, social, templating
+from .. import (
+    auth,
+    catalogue,
+    config,
+    db,
+    monnify,
+    order_status,
+    payments,
+    ratelimit,
+    social,
+    templating,
+)
 from ..phone import whatsapp_link
 from ..templating import photo_for, templates
 from .reviews import bought_and_received, public, summarise
@@ -122,6 +133,7 @@ async def home(request: Request):
         delivery_fee=await catalogue.delivery_fee(),
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
+        monnify_ready=monnify.is_ready(),
         contact_phone=await db.get_setting("contact_phone", ""),
         social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
@@ -272,6 +284,7 @@ async def product_page(request: Request, product_id: str):
         delivery_fee=await catalogue.delivery_fee(),
         areas=await catalogue.delivery_areas(),
         bank=await catalogue.bank_details(),
+        monnify_ready=monnify.is_ready(),
         contact_phone=await db.get_setting("contact_phone", ""),
         social_links=social.public_links(await db.get_setting("social", {})),
         whatsapp=whatsapp_link(
@@ -443,7 +456,7 @@ async def my_orders(request: Request):
             reason="Sign in to see your past orders.",
         )
     orders = await db.get_orders_for_user(user["email"])
-    return _render(request, "partials/orders.html", orders=orders)
+    return _render(request, "partials/orders.html", orders=orders, now_epoch=payments.now_epoch())
 
 
 @router.get("/api/store/ui", response_class=HTMLResponse)
@@ -505,6 +518,15 @@ async def staff_set_status(request: Request, order_id: str, status: str = Form("
         return await _store_feed(
             request,
             ("error", f'Order {order_id} cannot move from "{order["status"]}" to "{status}".'),
+        )
+    if order_status.is_fulfilment(status) and payments.has_open_discrepancy(order):
+        return await _store_feed(
+            request,
+            (
+                "error",
+                f"Order {order_id} has an unresolved payment discrepancy. Resolve it before "
+                "moving the order forward.",
+            ),
         )
     # Atomic: only applies if the status is still what staff were looking at.
     ok = await db.update_order_status(order_id, status, allowed_from=[order["status"]])

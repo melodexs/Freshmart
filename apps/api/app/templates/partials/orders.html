@@ -17,6 +17,23 @@
     {% if o.note %}<div style="margin-top:4px;">Note: {{ o.note }}</div>{% endif %}
     {% if o.paymentDetail and o.paymentDetail.eta and o.status not in ("Delivered", "Cancelled") %}<div class="eta-line">Estimated delivery: {{ o.paymentDetail.eta }}</div>{% endif %}
     {% include "partials/order_progress.html" %}
+    {% set mn = (o.paymentDetail or {}).get("monnify") %}
+    {% if mn and o.payMethod == "before" and not (o.paymentDetail or {}).get("paid") and o.status == "Awaiting payment" and mn.accountNumber %}
+    {% set st = (mn.status or "PENDING")|upper %}
+    {% set label = {"PENDING": "Awaiting your transfer", "PARTIALLY_PAID": "Part payment received", "FAILED": "Payment setup failed", "EXPIRED": "Account expired", "REVERSED": "Payment reversed"}.get(st, st|title) %}
+    <div class="pay-panel" style="margin-top:8px;">
+      <div class="pay-status {{ st|lower }}">{{ label }}</div>
+      <div class="pay-row"><span class="muted">Bank</span><strong>{{ mn.bankName or "—" }}</strong></div>
+      <div class="pay-row"><span class="muted">Account name</span><strong>{{ mn.accountName or "—" }}</strong></div>
+      <div class="pay-row"><span class="muted">Account number</span><strong class="pay-account">{{ mn.accountNumber }}</strong></div>
+      <div class="pay-row"><span class="muted">Send exactly</span><strong>{{ o.total|naira }}</strong></div>
+      {% if mn.expiresOn %}<div class="pay-expiry">This account expires at {{ mn.expiresOn }}.</div>{% endif %}
+      <button type="button" class="btn-ghost" data-copy-account="{{ mn.accountNumber }}">Copy account number</button>
+      {% if mn.status in ("EXPIRED", "FAILED") or (mn.expiresAtEpoch and mn.expiresAtEpoch|float <= now_epoch|float) %}
+      <button type="button" class="btn-ghost" data-reissue-account="{{ o.id }}">Get a new account</button>
+      {% endif %}
+    </div>
+    {% endif %}
     {% set reorderable = o["items"] | selectattr("productId", "defined") | list %}
     {% if reorderable %}
     <button type="button" class="status-btn reorder-btn" style="margin-top:8px;"
