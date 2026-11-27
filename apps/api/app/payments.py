@@ -42,6 +42,9 @@ SETTLED_STATES = (PAID, OVERPAID)
 
 # Polls from the browser are cheap, but not free: one Monnify lookup per order per few seconds.
 _SYNC_INTERVAL_SECONDS = 5
+# An older attempt is checked far less often: it is a safety net, not the primary signal.
+_HISTORY_SYNC_SECONDS = 60
+SWEEP_INTERVAL_SECONDS = 60
 _LAST_SYNC: dict[str, float] = {}
 _LAST_SYNC_LIMIT = 500
 _LAST_SYNC_TTL = 600.0
@@ -168,18 +171,25 @@ def public_view(order: dict) -> dict | None:
         "expiresOn": attempt.get("expiresOn") or "",
         "secondsLeft": seconds_left,
         "amountPaid": attempt.get("amountPaid"),
+        "cumulativePaid": attempt.get("cumulativePaid") or attempt.get("amountPaid"),
+        "overpaidBy": attempt.get("overpaidBy") or 0,
         "attempt": attempt.get("attempt"),
-        "message": _message_for(status),
+        "message": _message_for(status, _amount(attempt.get("overpaidBy"))),
     }
 
 
-def _message_for(status: str) -> str:
+def _message_for(status: str, overpaid_by: int = 0) -> str:
     if status == PENDING:
         return (
             "Waiting for your bank transfer. Your order will be processed after payment "
             "confirmation."
         )
     if status == PAID:
+        if overpaid_by > 0:
+            return (
+                f"Payment received, but you sent ₦{overpaid_by:,} more than the order total. "
+                "The store will contact you about the difference before your order is prepared."
+            )
         return (
             "Payment received successfully! Your order is confirmed and will be prepared for "
             "delivery."
@@ -218,6 +228,24 @@ def _customer_name(order: dict) -> str:
     return str(_detail(order).get("_name") or "").strip()
 
 
+def _closed_status(attempt: dict, reason: str) -> str:
+    """How a replaced attempt should read in history.
+
+    Money received is the strongest fact about an attempt: an account that was paid into is
+    never described as FAILED just because we later replaced it. An attempt with nothing in it
+    keeps the honest reason it was closed.
+    """
+    received = _amount(attempt.get("amountPaid"))
+    expected = _amount(attempt.get("amount"))
+    if received > 0:
+        if expected and received > expected:
+            return OVERPAID
+        if expected and received >= expected:
+            return PAID
+        return PARTIALLY_PAID
+    return EXPIRED if reason == "expired" else FAILED
+
+
 def _closed_entry(attempt: dict, reason: str) -> dict:
     """A history record for an attempt we are replacing. Keeps its evidence, closes it."""
     return {
@@ -231,18 +259,26 @@ def _closed_entry(attempt: dict, reason: str) -> dict:
         "createdAt": attempt.get("createdAt") or "",
         "closedAt": now_iso(),
         "closedReason": reason,
-        "status": EXPIRED if reason == "expired" else FAILED,
+        "status": _closed_status(attempt, reason),
         "amountPaid": attempt.get("amountPaid"),
+        "cumulativePaid": attempt.get("cumulativePaid"),
     }
 
 
 def _prune_last_sync() -> None:
-    """The throttle map is per process and must not grow forever."""
-    if len(_LAST_SYNC) <= _LAST_SYNC_LIMIT:
-        return
-    cutoff = time.monotonic() - _LAST_SYNC_TTL
-    for key in [k for k, seen in _LAST_SYNC.items() if seen < cutoff]:
+    """Keep the throttle map bounded: stale keys first, then the oldest ones.
+
+    A hard bound matters more than precision here. Losing a throttle entry costs one extra
+    Monnify lookup; keeping every entry forever costs memory on a long-running process.
+    """
+    now = time.monotonic()
+    for key in [k for k, seen in _LAST_SYNC.items() if now - seen > _LAST_SYNC_TTL]:
         _LAST_SYNC.pop(key, None)
+    excess = len(_LAST_SYNC) - _LAST_SYNC_LIMIT
+    if excess > 0:
+        oldest = sorted(_LAST_SYNC.items(), key=lambda kv: kv[1])[:excess]
+        for key, _seen in oldest:
+            _LAST_SYNC.pop(key, None)
 
 
 # ---------- creating the account ----------
@@ -262,9 +298,12 @@ async def _claim_attempt(order: dict) -> str | None:
         age = _LOCK_STALE_SECONDS + 1
     if age <= _LOCK_STALE_SECONDS:
         return None
-    # The holder died mid-flight. Take the lock over rather than leaving the order stuck.
-    await db.merge_payment_detail(order["id"], {_LOCK_KEY: claim})
-    return token
+    # The holder died mid-flight. Take the lock over only if it is still the very lock we saw,
+    # so two contenders cannot both win the same stale lock.
+    held_token = str(held.get("token") or "")
+    if held_token and await db.takeover_payment_lock(order["id"], held_token, claim):
+        return token
+    return None
 
 
 async def _release_claim(order_id: str, token: str | None) -> None:
@@ -427,7 +466,6 @@ async def _record_setup_failure(order: dict, reference: str, attempt_no: int, wh
             "monnify": failed,
             "reservationExpiresAt": None,
             "reservationExpiresAtEpoch": None,
-            "needsReconciliation": None,
         },
     )
     await db.add_audit(
@@ -506,6 +544,40 @@ async def expire_stale_reservation(order: dict) -> bool:
     return True
 
 
+async def sweep_stale_reservations(limit: int = 50) -> int:
+    """Expire reservations that ran out, whether or not the customer ever comes back.
+
+    Each expiry is claimed atomically (one status transition, one stock release), so running
+    this often, from more than one place, or twice at once cannot release stock twice.
+    """
+    expired = 0
+    try:
+        orders = await db.list_orders_with_stale_reservations(
+            order_status.AWAITING_PAYMENT, now_epoch(), limit
+        )
+    except Exception:  # noqa: BLE001 - a sweep must never break a request or a checkout
+        return 0
+    for order in orders:
+        try:
+            if await expire_stale_reservation(order):
+                expired += 1
+        except Exception:  # noqa: BLE001 - keep sweeping the rest
+            continue
+    return expired
+
+
+async def reservation_sweeper(
+    stop: asyncio.Event, interval: float = SWEEP_INTERVAL_SECONDS
+) -> None:
+    """The in-process scheduled sweep. Started at application startup and stopped at shutdown."""
+    while not stop.is_set():
+        await sweep_stale_reservations()
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            continue
+
+
 async def release_stock(order: dict, reason: str) -> bool:
     """Put the order's stock back exactly once, whatever else is happening."""
     claimed = await db.merge_payment_detail(
@@ -532,23 +604,67 @@ async def release_stock(order: dict, reason: str) -> bool:
 # ---------- checking a payment ----------
 
 
-async def sync_status(order: dict, *, throttle: bool = False) -> dict:
-    """Ask Monnify for the truth about the current attempt. Never settles on its own word alone."""
+def _due(order_id: str, reference: str, interval: float) -> bool:
+    """Rate limit per order and per reference. A zero interval means "check it now"."""
+    if interval <= 0:
+        return True
+    key = f"{order_id}:{reference}"
+    _prune_last_sync()
+    last = _LAST_SYNC.get(key, 0.0)
+    if time.monotonic() - last < interval:
+        return False
+    _LAST_SYNC[key] = time.monotonic()
+    return True
+
+
+async def _apply(order: dict, data: dict, source: str) -> dict:
+    """Reconcile, then re-read the order so the caller sees what was stored."""
+    await reconcile(order, data, source=source)
+    return await db.get_order(order["id"]) or order
+
+
+def unpaid_history(order: dict) -> list[dict]:
+    """Older attempts that still might receive money, newest first."""
+    entries = [
+        e
+        for e in history_of(_attempt(order))
+        if str(e.get("status") or "") not in SETTLED_STATES and _amount(e.get("amountPaid")) >= 0
+    ]
+    return list(reversed(entries))
+
+
+async def sync_status(order: dict, *, throttle: bool = False, deep: bool = False) -> dict:
+    """Ask Monnify about the current attempt, and about one older attempt as a safety net.
+
+    The webhook is still the primary signal. This exists so a payment into a replaced account is
+    found even when its notification never arrives, and it never settles on anything but a
+    verified Monnify answer.
+    """
+    if is_paid(order):
+        return _attempt(order)
     attempt = _attempt(order)
-    reference = str(attempt.get("paymentReference") or "")
-    if not reference or is_paid(order):
-        return attempt
-    if throttle:
-        _prune_last_sync()
-        last = _LAST_SYNC.get(order["id"], 0.0)
-        if time.monotonic() - last < _SYNC_INTERVAL_SECONDS:
-            return attempt
-        _LAST_SYNC[order["id"]] = time.monotonic()
-    try:
-        data = await monnify.query_transaction(reference)
-    except monnify.MonnifyError:
-        return attempt
-    return await reconcile(order, data, source="monnify-poll")
+    current = str(attempt.get("paymentReference") or "")
+    if current and _due(order["id"], current, _SYNC_INTERVAL_SECONDS if throttle else 0):
+        try:
+            data = await monnify.query_transaction(current)
+        except monnify.MonnifyError:
+            data = None
+        if data:
+            order = await _apply(order, data, "monnify-poll")
+    if is_paid(order):
+        return _attempt(order)
+    older = unpaid_history(order)
+    if older:
+        reference = str(older[0].get("paymentReference") or "")
+        interval = 0 if deep else _HISTORY_SYNC_SECONDS
+        if reference and _due(order["id"], reference, interval):
+            try:
+                data = await monnify.query_transaction(reference)
+            except monnify.MonnifyError:
+                data = None
+            if data:
+                order = await _apply(order, data, "monnify-history-poll")
+    return _attempt(order)
 
 
 def _amount(value) -> int:
@@ -629,8 +745,43 @@ def _with_history_status(attempt: dict, reference: str, patch: dict) -> list[dic
     return updated
 
 
+def _cumulative_received(attempt: dict, *, matched_reference: str, paid: int) -> int:
+    """Everything verified as received for this order, each attempt counted once.
+
+    Each attempt stores its own cumulative amountPaid, so adding the stored numbers is
+    idempotent: a repeated notification replaces a value, it never adds one.
+    """
+    total = 0
+    seen: set[str] = set()
+    for entry in [*history_of(attempt), attempt]:
+        reference = str(entry.get("paymentReference") or "")
+        if not reference or reference in seen:
+            continue
+        seen.add(reference)
+        amount = paid if reference == matched_reference else _amount(entry.get("amountPaid"))
+        if amount > 0:
+            total += amount
+    return total
+
+
+def _settled_state(cumulative: int, order_total: int, fallback: str) -> str:
+    """What the order's payments add up to, whatever this one attempt alone looks like."""
+    if order_total <= 0:
+        return fallback
+    if cumulative > order_total:
+        return OVERPAID
+    if cumulative >= order_total:
+        return PAID
+    return fallback
+
+
 async def reconcile(order: dict, data: dict, *, source: str) -> dict:
-    """Apply Monnify's record to the order. Idempotent, and never downgrades a paid order."""
+    """Apply Monnify's record to the order.
+
+    Settlement is decided on the sum of every verified receipt for the order, not just this
+    attempt, so money paid into a replaced account is neither forgotten nor counted twice.
+    Idempotent, and never downgrades a paid order.
+    """
     attempt = _attempt(order)
     total = _amount(order.get("total"))
     seen_reference = str(data.get("paymentReference") or "")
@@ -639,7 +790,17 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
     method = str(data.get("paymentMethod") or "").upper()
 
     if is_paid(order):
-        # A retried or late notification for an order we already settled changes nothing.
+        # A retried or late notification for an order we already settled never changes the
+        # order, but money arriving after settlement still has to be visible to a human.
+        matched, _historical = attempt_for_reference(attempt, seen_reference)
+        received = _amount(data.get("amountPaid"))
+        if matched is not None:
+            cumulative = _cumulative_received(
+                attempt, matched_reference=seen_reference, paid=received
+            )
+        else:
+            cumulative = _amount(_detail(order).get("paidAmount"))
+        excess = cumulative - total if total > 0 else 0
         await db.add_audit(
             "monnify",
             "payment_already_settled",
@@ -648,8 +809,23 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                 "source": source,
                 "paymentReference": seen_reference,
                 "paymentStatus": data.get("paymentStatus"),
+                "cumulativePaid": cumulative,
+                "overpaidBy": max(0, excess),
             },
         )
+        if matched is not None and excess > 0:
+            await _flag_reconciliation(
+                order,
+                seen_reference,
+                data,
+                "payment_overpaid_after_settlement",
+                {
+                    "source": source,
+                    "cumulativePaid": cumulative,
+                    "orderTotal": total,
+                    "overpaidBy": excess,
+                },
+            )
         return attempt
 
     matched, historical = attempt_for_reference(attempt, seen_reference)
@@ -722,13 +898,23 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
     state, paid = classify(
         data, expected, str(matched.get("status") or ""), matched.get("amountPaid")
     )
-    patch = {"status": state, "amountPaid": paid, "checkedAt": now_iso(), "lastSource": source}
+    cumulative = _cumulative_received(attempt, matched_reference=seen_reference, paid=paid)
+    final = _settled_state(cumulative, total, state)
+    overpaid_by = cumulative - total if total > 0 and cumulative > total else 0
+
+    patch = {
+        "status": state,
+        "amountPaid": paid,
+        "cumulativePaid": cumulative,
+        "checkedAt": now_iso(),
+        "lastSource": source,
+    }
     if seen_transaction:
         patch["transactionReference"] = seen_transaction
     if data.get("paidOn"):
         patch["paidOn"] = data.get("paidOn")
-    if state == OVERPAID:
-        patch["overpaidBy"] = paid - expected
+    if overpaid_by > 0:
+        patch["overpaidBy"] = overpaid_by
 
     if historical:
         merged = {
@@ -736,10 +922,8 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
             "history": _with_history_status(attempt, seen_reference, patch),
             "checkedAt": now_iso(),
         }
-        if state in SETTLED_STATES:
-            merged.update(
-                {"status": state, "amountPaid": paid, "settledFromHistorical": seen_reference}
-            )
+        if final in SETTLED_STATES:
+            merged.update({"status": final, "settledFromHistorical": seen_reference})
         await db.add_audit(
             "monnify",
             "payment_matched_historical_attempt",
@@ -748,23 +932,42 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                 "source": source,
                 "paymentReference": seen_reference,
                 "currentReference": attempt.get("paymentReference"),
-                "paymentStatus": state,
+                "paymentStatus": final,
                 "amountPaid": paid,
+                "cumulativePaid": cumulative,
             },
         )
     else:
         merged = {**attempt, **patch}
+        if final in SETTLED_STATES:
+            merged["status"] = final
 
-    if state in SETTLED_STATES:
+    merged["cumulativePaid"] = cumulative
+    if overpaid_by > 0:
+        merged["overpaidBy"] = overpaid_by
+
+    if final in SETTLED_STATES:
+        needs = None
+        if overpaid_by > 0:
+            needs = {
+                "reason": "payment_overpaid",
+                "paymentReference": seen_reference,
+                "amountPaid": cumulative,
+                "orderTotal": total,
+                "overpaidBy": overpaid_by,
+                "seenAt": now_iso(),
+            }
         record = {
             "paid": True,
-            "paidAmount": paid,
+            "paidAmount": cumulative,
             "paidMethod": "monnify",
             "paidReference": seen_transaction or seen_reference,
             "paidAt": data.get("paidOn") or now_iso(),
             "confirmedBy": f"monnify ({source})",
             "monnify": merged,
         }
+        if needs:
+            record["needsReconciliation"] = needs
         moved = await db.mark_paid_verified(
             order["id"], order_status.AWAITING_PAYMENT, order_status.PAID, record
         )
@@ -777,12 +980,17 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                     "source": source,
                     "paymentReference": seen_reference,
                     "transactionReference": merged.get("transactionReference"),
-                    "amountPaid": paid,
+                    "amountPaid": cumulative,
+                    "thisAttemptPaid": paid,
                     "orderTotal": total,
-                    "overpaid": state == OVERPAID,
+                    "overpaid": overpaid_by > 0,
                     "historicalAttempt": historical,
                 },
             )
+            if needs:
+                await db.add_audit(
+                    "monnify", "payment_overpaid", order["id"], {**needs, "source": source}
+                )
         else:
             fresh = await db.get_order(order["id"]) or order
             if is_paid(fresh):
@@ -791,8 +999,20 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                     "monnify",
                     "payment_already_settled",
                     order["id"],
-                    {"source": source, "paymentReference": seen_reference, "amountPaid": paid},
+                    {
+                        "source": source,
+                        "paymentReference": seen_reference,
+                        "amountPaid": cumulative,
+                    },
                 )
+                if needs:
+                    await _flag_reconciliation(
+                        order,
+                        seen_reference,
+                        data,
+                        "payment_overpaid_after_settlement",
+                        {**needs, "source": source},
+                    )
             else:
                 await db.merge_payment_detail(
                     order["id"],
@@ -801,7 +1021,7 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                         "needsReconciliation": {
                             "reason": "payment_received_unmatched",
                             "paymentReference": seen_reference,
-                            "amountPaid": paid,
+                            "amountPaid": cumulative,
                             "orderStatus": fresh.get("status"),
                             "seenAt": now_iso(),
                         },
@@ -814,7 +1034,7 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                     {
                         "source": source,
                         "paymentReference": seen_reference,
-                        "amountPaid": paid,
+                        "amountPaid": cumulative,
                         "orderStatus": fresh.get("status"),
                         "note": "Money arrived but the order was not awaiting payment. Check manually.",
                     },
@@ -831,15 +1051,14 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
             {
                 "source": source,
                 "paymentReference": seen_reference,
+                "paymentStatus": state,
                 "amountPaid": paid,
-                "orderTotal": expected,
+                "cumulativePaid": cumulative,
+                "orderTotal": total,
             },
         )
-    order.setdefault("paymentDetail", {})["monnify"] = merged
     return merged
 
-
-# ---------- webhook ----------
 
 _HANDLED_EVENTS = {
     "SUCCESSFUL_TRANSACTION",

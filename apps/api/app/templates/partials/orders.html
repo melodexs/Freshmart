@@ -27,8 +27,11 @@
       <div class="pay-row"><span class="muted">Account name</span><strong>{{ mn.accountName or "—" }}</strong></div>
       <div class="pay-row"><span class="muted">Account number</span><strong class="pay-account">{{ mn.accountNumber }}</strong></div>
       <div class="pay-row"><span class="muted">Send exactly</span><strong>{{ o.total|naira }}</strong></div>
-      {% if mn.expiresOn %}<div class="pay-expiry">This account expires at {{ mn.expiresOn }}. If it has expired, open this order to request a new one.</div>{% endif %}
+      {% if mn.expiresOn %}<div class="pay-expiry">This account expires at {{ mn.expiresOn }}.</div>{% endif %}
       <button type="button" class="btn-ghost" data-copy-account="{{ mn.accountNumber }}">Copy account number</button>
+      {% if mn.status in ("EXPIRED", "FAILED") or (mn.expiresAtEpoch and mn.expiresAtEpoch|float <= now_epoch|float) %}
+      <button type="button" class="btn-ghost" data-reissue-account="{{ o.id }}">Get a new account</button>
+      {% endif %}
     </div>
     {% endif %}
     {% set reorderable = o["items"] | selectattr("productId", "defined") | list %}

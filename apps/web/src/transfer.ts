@@ -146,10 +146,10 @@ function tick(): void {
   if (el) renderExpiry(el, current);
 }
 
-async function fetchStatus(): Promise<MonnifyPayment | null> {
+async function fetchStatus(deep = false): Promise<MonnifyPayment | null> {
   if (!orderId) return null;
   try {
-    const res = await fetch(`/api/payments/${encodeURIComponent(orderId)}`, {
+    const res = await fetch(`/api/payments/${encodeURIComponent(orderId)}${deep ? "?check=1" : ""}`, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
@@ -177,7 +177,7 @@ function apply(payment: MonnifyPayment): void {
 async function checkNow(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   button.textContent = "Checking…";
-  const fresh = await fetchStatus();
+  const fresh = await fetchStatus(true);
   if (fresh) apply(fresh);
   button.disabled = false;
   button.textContent = "I have sent it — check now";

@@ -69,8 +69,11 @@ async def init() -> None:
               id BIGSERIAL PRIMARY KEY, product_id TEXT NOT NULL, change INTEGER NOT NULL,
               after INTEGER, reason TEXT NOT NULL, order_id TEXT, actor TEXT NOT NULL,
               at TIMESTAMPTZ NOT NULL DEFAULT now());
-            CREATE INDEX IF NOT EXISTS orders_monnify_reference_idx
-              ON orders ((payment_detail->'monnify'->>'paymentReference'));
+            -- One GIN index covers the current reference and the history array; a plain
+            -- expression index cannot serve an OR across those two shapes.
+            DROP INDEX IF EXISTS orders_monnify_reference_idx;
+            CREATE INDEX IF NOT EXISTS orders_payment_detail_gin
+              ON orders USING gin (payment_detail);
             CREATE INDEX IF NOT EXISTS stock_moves_product_idx ON stock_moves (product_id, at DESC);
             CREATE TABLE IF NOT EXISTS discount_codes (
               code TEXT PRIMARY KEY, rule JSONB NOT NULL, created TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -482,9 +485,12 @@ async def get_order_by_payment_reference(reference: str):
     async with _pool.acquire() as c:
         r = await c.fetchrow(
             """SELECT * FROM orders
-               WHERE payment_detail->'monnify'->>'paymentReference' = $1
-                  OR COALESCE(payment_detail->'monnify'->'history', '[]'::jsonb)
-                     @> jsonb_build_array(jsonb_build_object('paymentReference', $1::text))
+               WHERE payment_detail @> jsonb_build_object(
+                         'monnify', jsonb_build_object('paymentReference', $1::text))
+                  OR payment_detail @> jsonb_build_object(
+                         'monnify', jsonb_build_object(
+                             'history', jsonb_build_array(
+                                 jsonb_build_object('paymentReference', $1::text))))
                ORDER BY date DESC LIMIT 1""",
             reference,
         )
@@ -503,6 +509,40 @@ async def drop_payment_detail_keys(order_id: str, keys: list[str]) -> bool:
             list(keys),
         )
     return res.endswith(" 1")
+
+
+async def takeover_payment_lock(order_id: str, observed_token: str, lock: dict) -> bool:
+    """Replace a stale attempt lock, but only if it is still the lock we inspected.
+
+    A compare-and-set in one statement: two contenders racing for the same stale lock produce
+    exactly one winner, so only one of them talks to Monnify.
+    """
+    async with _pool.acquire() as c:
+        res = await c.execute(
+            """UPDATE orders
+               SET payment_detail = COALESCE(payment_detail,'{}'::jsonb) || $3::jsonb
+               WHERE id=$1 AND payment_detail->'paymentAttemptLock'->>'token' = $2""",
+            order_id,
+            observed_token,
+            json.dumps({"paymentAttemptLock": lock}),
+        )
+    return res.endswith(" 1")
+
+
+async def list_orders_with_stale_reservations(status: str, now_epoch: float, limit: int = 50):
+    """Orders whose payment-setup reservation has run out and still hold their stock."""
+    async with _pool.acquire() as c:
+        rows = await c.fetch(
+            """SELECT * FROM orders
+               WHERE status=$1
+                 AND jsonb_typeof(payment_detail->'reservationExpiresAtEpoch') = 'number'
+                 AND (payment_detail->>'reservationExpiresAtEpoch')::float8 <= $2
+               ORDER BY date LIMIT $3""",
+            status,
+            float(now_epoch),
+            int(limit),
+        )
+    return [_order(r) for r in rows]
 
 
 async def mark_paid_verified(

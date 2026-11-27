@@ -414,6 +414,53 @@ async def set_order_status(order_id: str, request: Request):
     return {"order": await db.get_order(order_id)}
 
 
+@router.post("/orders/{order_id}/resolve-payment")
+async def resolve_payment(order_id: str, request: Request):
+    """Close a payment discrepancy once a human has actually dealt with it.
+
+    An overpaid order carries needsReconciliation and cannot move forward until someone says how
+    the excess was handled, so money received twice is never quietly absorbed.
+    """
+    o = await db.get_order(order_id)
+    if not o:
+        return err(404, "That order does not exist.")
+    detail = o.get("paymentDetail") or {}
+    needs = detail.get("needsReconciliation")
+    if not needs:
+        return err(409, "This order has no payment discrepancy to resolve.")
+    b = await body_of(request)
+    note = clean_text(b.get("note"), 200)
+    if not note:
+        return err(400, "Say how the discrepancy was handled, so the record is complete.")
+    who = auth.actor_name(request)
+    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    await db.merge_payment_detail(
+        order_id,
+        {
+            "needsReconciliation": None,
+            "reconciliationResolved": {
+                "by": who,
+                "at": now,
+                "note": note,
+                "was": needs,
+            },
+        },
+    )
+    await db.add_audit(
+        who,
+        "payment_discrepancy_resolved",
+        order_id,
+        {
+            "note": note,
+            "reason": needs.get("reason"),
+            "overpaidBy": needs.get("overpaidBy"),
+            "amountPaid": needs.get("amountPaid"),
+            "orderTotal": needs.get("orderTotal"),
+        },
+    )
+    return {"order": await db.get_order(order_id)}
+
+
 PAY_METHODS = {"bank transfer", "ussd", "cash", "pos", "other"}
 
 

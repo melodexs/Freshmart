@@ -527,7 +527,9 @@ def _expire(client, order):
     from app import db
 
     loop = asyncio.new_event_loop()
-    attempt = order["paymentDetail"]["monnify"]
+    # Read the attempt back first: a stale copy would quietly drop what it has already received.
+    fresh = loop.run_until_complete(db.get_order(order["id"]))
+    attempt = ((fresh.get("paymentDetail") or {}).get("monnify")) or {}
     loop.run_until_complete(
         db.merge_payment_detail(order["id"], {"monnify": {**attempt, "expiresAtEpoch": 1}})
     )
@@ -545,9 +547,10 @@ def _audit(order_id):
 def _paid_result(reference, amount, **over):
     """What Monnify's query returns for a settled transfer. The webhook settles on this, not the
     event body, so every test that expects settlement sets it."""
+    # The transaction reference is only included when a test asks for one: a default value
+    # would look like a mismatch to an attempt that legitimately has a different reference.
     return {
         "paymentReference": reference,
-        "transactionReference": "MNFY|TEST|1",
         "paymentStatus": "PAID",
         "amountPaid": amount,
         "currency": "NGN",
@@ -977,3 +980,347 @@ def test_poll_keeps_working_after_a_part_payment(monnify_client):
     assert again.status_code == 200
     assert again.json()["payment"]["paymentReference"] == reference
     assert len(c.fake.init_calls) == before
+
+
+# ---------- second correction round: cumulative money, history, sweeps ----------
+
+
+def _half(order):
+    return order["total"] // 2
+
+
+def test_partial_on_old_account_then_full_on_new_flags_the_excess(monnify_client):
+    """N2: the reproduced failure. 2,300 on the old account plus 4,600 on the new one."""
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    first = _expire(c, order)
+
+    c.fake.results[first] = _paid_result(first, total // 2, paymentStatus="PARTIALLY_PAID")
+    assert webhook(c, webhook_payload(first, amount=total // 2)).status_code == 200
+    assert order_of(c, order["id"])["paymentDetail"]["monnify"]["status"] == "PARTIALLY_PAID"
+
+    fresh = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"]
+    second = fresh["paymentReference"]
+    c.fake.results[second] = _paid_result(second, total)
+    assert webhook(c, webhook_payload(second, amount=total)).status_code == 200
+
+    stored = order_of(c, order["id"])
+    detail = stored["paymentDetail"]
+    assert stored["status"] == "Payment confirmed", detail
+    assert detail["paidAmount"] == total + total // 2
+    assert detail["needsReconciliation"]["reason"] == "payment_overpaid"
+    assert detail["needsReconciliation"]["overpaidBy"] == total // 2
+    actions = [a["action"] for a in _audit(order["id"])]
+    assert "payment_overpaid" in actions
+
+
+def test_two_partial_payments_across_attempts_settle_the_order(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    first = _expire(c, order)
+
+    c.fake.results[first] = _paid_result(first, 2000, paymentStatus="PARTIALLY_PAID")
+    webhook(c, webhook_payload(first, amount=2000))
+    second = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"][
+        "paymentReference"
+    ]
+    c.fake.results[second] = _paid_result(second, total - 2000, paymentStatus="PARTIALLY_PAID")
+    webhook(c, webhook_payload(second, amount=total - 2000))
+
+    stored = order_of(c, order["id"])
+    assert stored["status"] == "Payment confirmed"
+    assert stored["paymentDetail"]["paidAmount"] == total
+    assert not stored["paymentDetail"].get("needsReconciliation")
+
+
+def test_duplicate_webhook_does_not_double_count_a_receipt(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"])
+    payload = webhook_payload(reference, amount=order["total"])
+    assert webhook(c, payload).status_code == 200
+    assert webhook(c, payload).status_code == 200
+
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert detail["paidAmount"] == order["total"]
+    assert not detail.get("needsReconciliation")
+
+
+def test_replaced_attempt_that_received_money_is_not_labelled_failed(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    first = _expire(c, order)
+    c.fake.results[first] = _paid_result(first, 1500, paymentStatus="PARTIALLY_PAID")
+    webhook(c, webhook_payload(first, amount=1500))
+    c.post(f"/api/payments/{order['id']}/new-account")
+
+    history = order_of(c, order["id"])["paymentDetail"]["monnify"]["history"]
+    assert history[0]["paymentReference"] == first
+    assert history[0]["status"] == "PARTIALLY_PAID"
+    assert history[0]["amountPaid"] == 1500
+
+
+def test_unpaid_replaced_attempt_stays_failed(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    _expire(c, order)
+    c.post(f"/api/payments/{order['id']}/new-account")
+    history = order_of(c, order["id"])["paymentDetail"]["monnify"]["history"]
+    assert history[0]["status"] == "FAILED"
+    assert history[0]["amountPaid"] in (None, 0)
+
+
+def test_late_payment_is_found_by_the_customer_check_without_a_webhook(monnify_client):
+    """N1: no notification arrives, the customer presses Check payment."""
+    c = monnify_client
+    order = place(c).json()["order"]
+    first = _expire(c, order)
+    c.post(f"/api/payments/{order['id']}/new-account")
+    c.fake.results[first] = _paid_result(first, order["total"])
+
+    r = c.get(f"/api/payments/{order['id']}?check=1")
+    assert r.status_code == 200
+    assert first in c.fake.queries
+    stored = order_of(c, order["id"])
+    assert stored["status"] == "Payment confirmed"
+    assert stored["paymentDetail"]["paidAmount"] == order["total"]
+
+
+def test_polling_alone_still_checks_only_on_its_own_cadence(monnify_client):
+    """A plain poll must not hammer Monnify with the history reference every time."""
+    c = monnify_client
+    order = place(c).json()["order"]
+    first = _expire(c, order)
+    c.post(f"/api/payments/{order['id']}/new-account")
+    c.fake.results[first] = _paid_result(first, order["total"])
+
+    c.get(f"/api/payments/{order['id']}")  # first poll: current attempt only
+    before = c.fake.queries.count(first)
+    c.get(f"/api/payments/{order['id']}")  # second poll within the 60s history window
+    assert c.fake.queries.count(first) == before
+
+
+def test_order_history_offers_a_new_account_only_when_it_can_help(monnify_client):
+    """N4: the action exists where the customer reads the instructions."""
+    c = monnify_client
+    order = place(c).json()["order"]
+    html = c.get("/ui/orders").text
+    assert order["paymentDetail"]["monnify"]["accountNumber"] in html
+    assert "data-reissue-account" not in html  # a live account needs no replacement
+
+    _expire(c, order)
+    html = c.get("/ui/orders").text
+    assert f'data-reissue-account="{order["id"]}"' in html
+
+    fresh = c.post(f"/api/payments/{order['id']}/new-account")
+    assert fresh.status_code == 200
+    assert (
+        fresh.json()["payment"]["paymentReference"]
+        != order["paymentDetail"]["monnify"]["paymentReference"]
+    )
+    assert "data-reissue-account" not in c.get("/ui/orders").text
+
+
+def test_paid_orders_never_offer_a_new_account(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"])
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+    assert "data-reissue-account" not in c.get("/ui/orders").text
+
+
+def test_sweeper_expires_an_abandoned_reservation(monnify_client):
+    """N5: nobody revisits the order, the stock still comes back."""
+    import asyncio
+
+    from app import db, payments
+
+    c = monnify_client
+    loop = asyncio.new_event_loop()
+    product = loop.run_until_complete(db.get_product("p1"))
+    loop.run_until_complete(db.save_product({**product, "stock": 10}))
+    c.fake.fail_init_transient = True
+    payments.RETRY_DELAY_SECONDS = 0
+    assert place(c).status_code == 502
+    order = loop.run_until_complete(db.get_all_orders())[0]
+    assert loop.run_until_complete(db.get_product("p1"))["stock"] == 8
+
+    loop.run_until_complete(
+        db.merge_payment_detail(
+            order["id"],
+            {
+                "reservationExpiresAtEpoch": payments.now_epoch() - 1,
+                "reservationExpiresAt": "2026-01-01T00:00:00Z",
+            },
+        )
+    )
+    assert loop.run_until_complete(payments.sweep_stale_reservations()) == 1
+    stored = loop.run_until_complete(db.get_order(order["id"]))
+    assert stored["status"] == "Cancelled"
+    assert loop.run_until_complete(db.get_product("p1"))["stock"] == 10
+    actions = [a["action"] for a in loop.run_until_complete(db.get_audit(order["id"]))]
+    assert "payment_reservation_expired" in actions
+
+
+def test_sweeper_is_idempotent_and_safe_when_run_twice_at_once(monnify_client):
+    import asyncio
+
+    from app import db, payments
+
+    c = monnify_client
+    loop = asyncio.new_event_loop()
+    product = loop.run_until_complete(db.get_product("p1"))
+    loop.run_until_complete(db.save_product({**product, "stock": 10}))
+    c.fake.fail_init_transient = True
+    payments.RETRY_DELAY_SECONDS = 0
+    place(c)
+    order = loop.run_until_complete(db.get_all_orders())[0]
+    loop.run_until_complete(
+        db.merge_payment_detail(
+            order["id"], {"reservationExpiresAtEpoch": payments.now_epoch() - 1}
+        )
+    )
+
+    async def twice():
+        return await asyncio.gather(
+            payments.sweep_stale_reservations(), payments.sweep_stale_reservations()
+        )
+
+    results = loop.run_until_complete(twice())
+    assert sum(results) == 1
+    assert loop.run_until_complete(db.get_product("p1"))["stock"] == 10
+    actions = [
+        a["action"]
+        for a in loop.run_until_complete(db.get_audit(order["id"]))
+        if a["action"] == "payment_reservation_expired"
+    ]
+    assert len(actions) == 1
+
+
+def test_sweeper_never_cancels_a_verified_payment(monnify_client):
+    import asyncio
+
+    from app import db, payments
+
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"])
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(
+        db.merge_payment_detail(
+            order["id"], {"reservationExpiresAtEpoch": payments.now_epoch() - 1}
+        )
+    )
+    assert loop.run_until_complete(payments.sweep_stale_reservations()) == 0
+    assert loop.run_until_complete(db.get_order(order["id"]))["status"] == "Payment confirmed"
+
+
+def test_throttle_map_keeps_a_hard_upper_bound():
+    """N6: fresh entries must not let the map grow past its limit."""
+    import time
+
+    from app import payments
+
+    payments._LAST_SYNC.clear()
+    now = time.monotonic()
+    for i in range(payments._LAST_SYNC_LIMIT + 120):
+        payments._LAST_SYNC[f"fresh-{i}"] = now
+    payments._prune_last_sync()
+    assert len(payments._LAST_SYNC) == payments._LAST_SYNC_LIMIT
+
+
+def test_existing_discrepancy_survives_a_later_setup_failure(monnify_client):
+    """N7: a flagged discrepancy must not be erased by an unrelated failure."""
+    import asyncio
+
+    from app import db
+
+    c = monnify_client
+    order = place(c).json()["order"]
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(
+        db.merge_payment_detail(
+            order["id"],
+            {"needsReconciliation": {"reason": "payment_overpaid", "overpaidBy": 2300}},
+        )
+    )
+    _expire(c, order)
+    c.fake.fail_init = True
+    assert c.post(f"/api/payments/{order['id']}/new-account").status_code == 502
+
+    detail = loop.run_until_complete(db.get_order(order["id"]))["paymentDetail"]
+    assert detail["needsReconciliation"]["reason"] == "payment_overpaid"
+
+
+def test_two_contenders_cannot_take_over_the_same_stale_lock(monnify_client):
+    """N8: the takeover is a compare-and-set, so exactly one contender wins."""
+    import asyncio
+
+    from app import db, payments
+
+    c = monnify_client
+    order = place(c).json()["order"]
+    loop = asyncio.new_event_loop()
+    stale = {"token": "dead-holder", "epoch": payments.now_epoch() - 999}
+    loop.run_until_complete(db.merge_payment_detail(order["id"], {"paymentAttemptLock": stale}))
+
+    async def contend():
+        fresh = await db.get_order(order["id"])
+        return await payments._claim_attempt(fresh)
+
+    async def both():
+        return await asyncio.gather(contend(), contend())
+
+    results = loop.run_until_complete(both())
+    assert sum(1 for r in results if r) == 1
+
+
+def test_admin_resolves_the_overpayment_before_fulfilment(monnify_client):
+    """N2.6: the excess is recorded, blocks progression, and a human closes it."""
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, total + 500)
+    webhook(c, webhook_payload(reference, amount=total + 500))
+    assert order_of(c, order["id"])["paymentDetail"]["needsReconciliation"]["overpaidBy"] == 500
+
+    staff = {"x-staff-key": "staff-test-key"}
+    assert (
+        c.post(f"/api/store/admin/orders/{order['id']}/resolve-payment", json={}, headers=staff)
+    ).status_code == 400
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Refunded the extra 500"},
+        headers=staff,
+    )
+    assert r.status_code == 200
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert not detail.get("needsReconciliation")
+    assert detail["reconciliationResolved"]["note"] == "Refunded the extra 500"
+    actions = [a["action"] for a in _audit(order["id"])]
+    assert "payment_discrepancy_resolved" in actions
+
+
+def test_resolve_needs_staff_and_an_actual_discrepancy(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "nothing to do"},
+        headers={"x-staff-key": "staff-test-key"},
+    )
+    assert r.status_code == 409
+    assert c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment", json={}
+    ).status_code in (
+        401,
+        403,
+    )

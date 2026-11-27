@@ -20,6 +20,7 @@ from .. import (
     db,
     monnify,
     order_status,
+    payments,
     ratelimit,
     social,
     templating,
@@ -455,7 +456,7 @@ async def my_orders(request: Request):
             reason="Sign in to see your past orders.",
         )
     orders = await db.get_orders_for_user(user["email"])
-    return _render(request, "partials/orders.html", orders=orders)
+    return _render(request, "partials/orders.html", orders=orders, now_epoch=payments.now_epoch())
 
 
 @router.get("/api/store/ui", response_class=HTMLResponse)

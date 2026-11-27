@@ -302,7 +302,10 @@ async function orders(root) {
   if (freshIds.size) { try { await api("/alerts/seen", { method: "POST" }); await pollAlerts(); } catch { /* try again next visit */ } }
 }
 function orderRow(o, reload) {
-  const next = { "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Ready for dispatch", "Cancelled"], "Ready for dispatch": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || [];
+  const needs = (o.paymentDetail && o.paymentDetail.needsReconciliation) || null;
+  // An unresolved discrepancy freezes the order: money received twice has to be looked at before
+  // anything is packed or sent.
+  const next = needs ? [] : ({ "Awaiting payment": ["Cancelled"], "Payment confirmed": ["Preparing your order", "Cancelled"], "Awaiting delivery — pay on arrival": ["Preparing your order", "Cancelled"], "Preparing your order": ["Ready for dispatch", "Cancelled"], "Ready for dispatch": ["Out for delivery", "Cancelled"], "Out for delivery": ["Delivered"] }[o.status] || []);
   const move = next.length ? h("select", { "aria-label": "Move order " + o.id, onchange: async (e) => {
     const to = e.target.value; if (!to) return;
     if (to === "Cancelled" && !confirm(`Cancel order ${o.id}? Its stock goes back on the shelf.`)) { e.target.value = ""; return; }
@@ -310,6 +313,10 @@ function orderRow(o, reload) {
   } }, h("option", { value: "", text: "Move to…" }), next.map((s) => h("option", { value: s, text: s }))) : h("span", { class: "muted", text: "Final" });
   const pay = o.status === "Awaiting payment" ? h("button", { class: "btn sm primary", style: "margin-bottom:6px", onclick: () => confirmPayment(o, reload), text: "Confirm payment" }) : null;
   const paid = o.paymentDetail && o.paymentDetail.paid ? h("div", { class: "muted", text: `Paid ${naira(o.paymentDetail.paidAmount)} by ${o.paymentDetail.paidMethod}, ref ${o.paymentDetail.paidReference}` }) : null;
+  const discrepancy = needs ? h("div", { style: "margin:6px 0;padding:6px 8px;border:1px solid #b7791f;border-radius:8px;font-size:.78rem;background:#fffaf0" },
+    h("strong", { text: `Needs reconciliation${needs.overpaidBy ? `: overpaid ${naira(needs.overpaidBy)}` : ""}` }),
+    h("div", { class: "muted", text: `${String(needs.reason || "").replace(/_/g, " ")} · received ${naira(needs.amountPaid || 0)} of ${naira(needs.orderTotal || o.total)}` }),
+    h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => resolveDiscrepancy(o, needs, reload), text: "Resolve discrepancy" })) : null;
   // Monnify transfer details, so staff can match a credit to the order without leaving the page.
   const m = (o.paymentDetail && o.paymentDetail.monnify) || null;
   const transfer = m ? h("div", { class: "muted", style: "font-size:.78rem;line-height:1.5" },
@@ -322,7 +329,27 @@ function orderRow(o, reload) {
   return h("tr", {}, h("td", {}, h("strong", { text: o.id }), h("div", { class: "muted", text: when(o.date) })),
     h("td", {}, o.customerName ? h("div", { text: o.customerName }) : null, h("div", { text: o.phone }), h("div", { class: "muted", text: o.user }), h("div", { class: "muted", text: [o.address, o.city].filter(Boolean).join(", ") }), o.instructions ? h("div", { class: "muted", text: "Note: " + o.instructions }) : null),
     h("td", {}, o.items.map((i) => h("div", { text: `${i.qty}× ${i.name}` }))),
-    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Pay before delivery" : "Pay on delivery" }), transfer, paid), h("td", {}, pay, h("div", {}, move), h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => history_(o), text: "History" })));
+    h("td", { text: naira(o.total) }), h("td", {}, pill(o.status), h("div", { class: "muted", text: o.payMethod === "before" ? "Pay before delivery" : "Pay on delivery" }), transfer, discrepancy, paid), h("td", {}, pay, h("div", {}, move), h("button", { class: "btn sm", style: "margin-top:6px", onclick: () => history_(o), text: "History" })));
+}
+
+function resolveDiscrepancy(o, needs, reload) {
+  const note = h("input", { maxlength: "200", placeholder: "How was the excess handled? e.g. refunded N2,300", "aria-label": "Resolution note" });
+  const msg = h("p", { class: "msg", role: "alert" });
+  const form = h("form", { class: "form", onsubmit: async (e) => {
+    e.preventDefault(); msg.textContent = "";
+    try {
+      await api(`/orders/${encodeURIComponent(o.id)}/resolve-payment`, { method: "POST", body: { note: note.value } });
+      toast(`Discrepancy resolved for ${o.id}`); close(); reload();
+    } catch (err) { msg.textContent = err.message; }
+  } },
+    h("p", {}, `Order ${o.id} received ${naira(needs.amountPaid || 0)} against ${naira(needs.orderTotal || o.total)}.`),
+    h("p", {}, "Record what happened to the difference. This is kept permanently with your name and the time."),
+    h("div", {}, h("label", { text: "How was it handled?" }), note), msg,
+    h("div", { style: "display:flex;gap:8px" }, h("button", { class: "btn primary", type: "submit", text: "Mark resolved" }), h("button", { class: "btn", type: "button", onclick: () => close(), text: "Cancel" })));
+  const modal = h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": "Resolve payment discrepancy" }, h("div", { class: "box" }, h("div", { class: "head" }, h("h2", { text: "Resolve discrepancy" }), h("button", { class: "btn sm", "aria-label": "Close", onclick: () => close(), text: "✕" })), form));
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  function close() { document.removeEventListener("keydown", onKey); modal.remove(); }
+  document.addEventListener("keydown", onKey); document.body.append(modal); note.focus();
 }
 
 function confirmPayment(o, reload) {

@@ -327,6 +327,43 @@ async def drop_payment_detail_keys(order_id: str, keys: list[str]) -> bool:
         return False
 
 
+async def takeover_payment_lock(order_id: str, observed_token: str, lock: dict) -> bool:
+    """Replace a stale attempt lock only if it is still the lock we inspected."""
+    with _lock:
+        data = _read()
+        for o in data["orders"]:
+            if o["id"] != order_id:
+                continue
+            detail = dict(o.get("paymentDetail") or {})
+            held = detail.get("paymentAttemptLock") or {}
+            if str(held.get("token") or "") != observed_token:
+                return False
+            detail["paymentAttemptLock"] = lock
+            o["paymentDetail"] = detail
+            _write(data)
+            return True
+        return False
+
+
+async def list_orders_with_stale_reservations(status: str, now_epoch: float, limit: int = 50):
+    """Orders whose payment-setup reservation has run out and still hold their stock."""
+    found = []
+    with _lock:
+        for o in _read()["orders"]:
+            if o.get("status") != status:
+                continue
+            detail = o.get("paymentDetail") or {}
+            try:
+                until = float(detail.get("reservationExpiresAtEpoch") or 0)
+            except (TypeError, ValueError):
+                continue
+            if until and until <= now_epoch:
+                found.append(o)
+            if len(found) >= limit:
+                break
+    return found
+
+
 async def mark_paid_verified(
     order_id: str, expected_from: str, new_status: str, record: dict
 ) -> bool:

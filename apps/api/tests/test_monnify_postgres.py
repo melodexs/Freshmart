@@ -49,6 +49,7 @@ class FakeMonnify:
     def __init__(self) -> None:
         self.init_calls: list[dict] = []
         self.query_result: dict | None = None
+        self.results: dict[str, dict] = {}
         self.counter = 0
 
     async def init_transaction(
@@ -74,6 +75,8 @@ class FakeMonnify:
         }
 
     async def query_transaction(self, payment_reference):
+        if payment_reference in self.results:
+            return self.results[payment_reference]
         return self.query_result or {
             "paymentReference": payment_reference,
             "paymentStatus": "PENDING",
@@ -258,3 +261,142 @@ def test_postgres_settlement_is_atomic(pg_client):
         is False
     )
     assert run(c, db.get_order, order["id"])["status"] == "Payment confirmed"
+
+
+# ---------- second correction round, on real PostgreSQL ----------
+
+
+def _paid(reference: str, amount: int, status: str = "PAID", **over) -> dict:
+    return {
+        "paymentReference": reference,
+        "paymentStatus": status,
+        "amountPaid": amount,
+        "currency": "NGN",
+        "paymentMethod": "ACCOUNT_TRANSFER",
+        **over,
+    }
+
+
+def _expire(client, order_id: str, attempt: dict) -> None:
+    run(
+        client,
+        db_merge,
+        order_id,
+        {"monnify": {**attempt, "expiresAtEpoch": 1}},
+    )
+
+
+def db_merge(order_id, patch):
+    from app import db
+
+    return db.merge_payment_detail(order_id, patch)
+
+
+def test_postgres_cumulative_receipts_flag_the_excess(pg_client):
+    """N2 on Postgres: part on the old account, full on the new one, excess recorded."""
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    total = order["total"]
+    first = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[first] = _paid(first, total // 2, "PARTIALLY_PAID")
+    assert webhook(c, first, total // 2, "PARTIALLY_PAID").status_code == 200
+
+    from app import db
+
+    fresh = run(c, db.get_order, order["id"])
+    run(
+        c,
+        db.merge_payment_detail,
+        order["id"],
+        {"monnify": {**fresh["paymentDetail"]["monnify"], "expiresAtEpoch": 1}},
+    )
+    second = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"][
+        "paymentReference"
+    ]
+    c.fake.results[second] = _paid(second, total)
+    assert webhook(c, second, total).status_code == 200
+
+    stored = run(c, db.get_order, order["id"])
+    detail = stored["paymentDetail"]
+    assert stored["status"] == "Payment confirmed"
+    assert detail["paidAmount"] == total + total // 2
+    assert detail["needsReconciliation"]["overpaidBy"] == total // 2
+    history = detail["monnify"]["history"]
+    assert history[0]["status"] == "PARTIALLY_PAID"
+    assert history[0]["amountPaid"] == total // 2
+
+
+def test_postgres_history_lookup_finds_a_replaced_reference(pg_client):
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    first = order["paymentDetail"]["monnify"]["paymentReference"]
+    from app import db
+
+    fresh = run(c, db.get_order, order["id"])
+    run(
+        c,
+        db.merge_payment_detail,
+        order["id"],
+        {"monnify": {**fresh["paymentDetail"]["monnify"], "expiresAtEpoch": 1}},
+    )
+    c.post(f"/api/payments/{order['id']}/new-account")
+    assert run(c, db.get_order_by_payment_reference, first)["id"] == order["id"]
+
+
+def test_postgres_lock_takeover_is_a_compare_and_set(pg_client):
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    from app import db
+
+    run(c, db.merge_payment_detail, order["id"], {"paymentAttemptLock": {"token": "dead"}})
+    claim = partial(db.takeover_payment_lock, order["id"], "dead", {"token": "one"})
+    again = partial(db.takeover_payment_lock, order["id"], "dead", {"token": "two"})
+    assert run(c, claim) is True
+    assert run(c, again) is False
+
+
+def test_postgres_lists_only_stale_reservations(pg_client):
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    from app import db, payments
+
+    assert run(c, db.list_orders_with_stale_reservations, "Awaiting payment", 1e12, 10) == []
+    run(
+        c,
+        db.merge_payment_detail,
+        order["id"],
+        {"reservationExpiresAtEpoch": payments.now_epoch() - 1},
+    )
+    found = run(
+        c, db.list_orders_with_stale_reservations, "Awaiting payment", payments.now_epoch(), 10
+    )
+    assert [o["id"] for o in found] == [order["id"]]
+
+
+def test_postgres_reference_lookup_can_use_the_gin_index(pg_client):
+    """N3 evidence: the OR across current and history is served by one GIN index."""
+    import asyncpg
+
+    c = pg_client
+    c.post("/api/orders", json=ORDER)
+
+    async def plan() -> str:
+        conn = await asyncpg.connect(DATABASE_URL)
+        try:
+            await conn.execute("SET enable_seqscan = off")
+            rows = await conn.fetch(
+                """EXPLAIN SELECT * FROM orders
+                   WHERE payment_detail @> jsonb_build_object(
+                             'monnify', jsonb_build_object('paymentReference', $1::text))
+                      OR payment_detail @> jsonb_build_object(
+                             'monnify', jsonb_build_object(
+                                 'history', jsonb_build_array(
+                                     jsonb_build_object('paymentReference', $1::text))))""",
+                "OGS-NOTHING",
+            )
+            return "\n".join(r[0] for r in rows)
+        finally:
+            await conn.close()
+
+    text = asyncio.new_event_loop().run_until_complete(plan())
+    assert "orders_payment_detail_gin" in text, text

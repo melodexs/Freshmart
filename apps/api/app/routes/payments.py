@@ -41,9 +41,16 @@ async def _owned_order(
 
 @router.get("/{order_id}")
 async def payment_status(
-    order_id: str, request: Request, user: dict = Depends(auth.require_auth)
+    order_id: str,
+    request: Request,
+    check: int = 0,
+    user: dict = Depends(auth.require_auth),
 ) -> JSONResponse:
-    """The customer's view of their payment, refreshed from Monnify at most every few seconds."""
+    """The customer's view of their payment, refreshed from Monnify at most every few seconds.
+
+    ``?check=1`` is the customer pressing "Check payment": it also asks Monnify about one older
+    attempt, so a transfer into a replaced account is found without waiting for its webhook.
+    """
     ratelimit.limit(request, "payment-status", 60, 60)
     order, problem = await _owned_order(order_id, request, user)
     if problem is not None:
@@ -53,7 +60,7 @@ async def payment_status(
 
     if order.get("payMethod") == "before" and not payments.is_paid(order):
         await payments.expire_stale_reservation(order)
-        await payments.sync_status(order, throttle=True)
+        await payments.sync_status(order, throttle=True, deep=bool(check))
         fresh = await db.get_order(order_id)
         if fresh is not None:
             order = fresh

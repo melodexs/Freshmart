@@ -146,6 +146,9 @@ async def place_order(request: Request, user: dict = Depends(auth.require_auth))
         "status": order_status.INITIAL[pay_method],
         "user": user["email"],
     }
+    # A safety net for the scheduled sweep: an abandoned payment reservation must not keep its
+    # stock off the shelf forever. Bounded, and it can never fail the checkout.
+    await payments.sweep_stale_reservations(10)
     # Reserve stock first, in one conditional statement per product, so two customers
     # cannot both buy the last item. If any product cannot be reserved, give back what we took.
     reserved: list[tuple[str, int]] = []
