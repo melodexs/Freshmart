@@ -401,12 +401,12 @@ async def _create_attempt(order: dict, current: dict) -> dict:
         account = await monnify.init_payment(str(transaction.get("transactionReference")))
     except monnify.MonnifyError as exc:
         if exc.transient:
-            await _record_transient_failure(order, reference, attempt_no, str(exc), creating)
+            await _record_transient_failure(order, reference, attempt_no, str(exc), creating, exc)
             raise PaymentSetupError(
                 "The bank did not answer in time. Your order is safe and your items are held: "
                 "please try again in a minute."
             ) from exc
-        await _record_setup_failure(order, reference, attempt_no, str(exc))
+        await _record_setup_failure(order, reference, attempt_no, str(exc), exc)
         raise PaymentSetupError(
             "We could not set up your bank transfer. Nothing was charged. Please try again or "
             "choose pay on delivery."
@@ -473,16 +473,39 @@ async def _init_with_retry(order: dict, reference: str) -> dict:
     raise last or monnify.MonnifyError("Monnify did not answer.")
 
 
-async def _record_setup_failure(order: dict, reference: str, attempt_no: int, why: str) -> None:
+def _diagnostics(error: object) -> dict:
+    """Safe failure detail for staff: status, Monnify code, stage, sanitised upstream message.
+
+    Never contains a header, an API key, a secret or an access token; ``safe_text`` strips them.
+    """
+    if not isinstance(error, monnify.MonnifyError):
+        return {}
+    return {
+        "lastErrorStatus": error.status,
+        "lastErrorCode": monnify.safe_text(error.response_code)[:32],
+        "lastErrorStage": monnify.safe_text(error.stage)[:40],
+        "lastErrorUpstream": monnify.safe_text(error.upstream_message),
+        "lastErrorAt": now_iso(),
+    }
+
+
+async def _record_setup_failure(
+    order: dict,
+    reference: str,
+    attempt_no: int,
+    why: str,
+    error: object | None = None,
+) -> None:
     """A permanent failure: the order must not sit there looking payable."""
     failed = {
         **_attempt(order),
         "status": FAILED,
         "paymentReference": reference or _attempt(order).get("paymentReference") or "",
         "attempt": attempt_no,
-        "lastError": (why or "")[:200],
+        "lastError": monnify.safe_text(why),
         "failedAt": now_iso(),
         "transient": False,
+        **_diagnostics(error),
     }
     await db.merge_payment_detail(
         order["id"],
@@ -496,7 +519,12 @@ async def _record_setup_failure(order: dict, reference: str, attempt_no: int, wh
         "monnify",
         "payment_setup_failed",
         order["id"],
-        {"paymentReference": reference, "attempt": attempt_no, "reason": (why or "")[:200]},
+        {
+            "paymentReference": reference,
+            "attempt": attempt_no,
+            "reason": monnify.safe_text(why),
+            **_diagnostics(error),
+        },
     )
     await release_stock(order, "payment setup failed")
     await db.release_discount(order["id"])
@@ -506,7 +534,12 @@ async def _record_setup_failure(order: dict, reference: str, attempt_no: int, wh
 
 
 async def _record_transient_failure(
-    order: dict, reference: str, attempt_no: int, why: str, creating: dict
+    order: dict,
+    reference: str,
+    attempt_no: int,
+    why: str,
+    creating: dict,
+    error: object | None = None,
 ) -> None:
     """A temporary outage: keep the order, keep the stock for a while, let them retry."""
     until = now_epoch() + RESERVATION_SECONDS
@@ -516,8 +549,9 @@ async def _record_transient_failure(
         "attempt": attempt_no,
         "status": FAILED,
         "transient": True,
-        "lastError": (why or "")[:200],
+        "lastError": monnify.safe_text(why),
         "failedAt": now_iso(),
+        **_diagnostics(error),
         "retryAfter": datetime.fromtimestamp(until, UTC).isoformat().replace("+00:00", "Z"),
     }
     await db.merge_payment_detail(
@@ -535,8 +569,9 @@ async def _record_transient_failure(
         {
             "paymentReference": reference,
             "attempt": attempt_no,
-            "reason": (why or "")[:200],
+            "reason": monnify.safe_text(why),
             "reservedUntil": failed["retryAfter"],
+            **_diagnostics(error),
         },
     )
 
