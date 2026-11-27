@@ -89,7 +89,7 @@ h1,h2,h3,.logo{font-family:var(--serif); font-weight:500; letter-spacing:-.01em;
 
 /* ---------- lower sections ---------- */
 .info-strip{margin-top:22px; position:relative; z-index:3;}
-.info-item{background:var(--paper); border:1px solid rgba(15,46,33,.08); box-shadow:0 18px 40px -22px rgba(15,46,33,.45); transition:transform .3s var(--ease), box-shadow .3s var(--ease);}
+.info-item{border-radius:24px; padding:16px 20px; background:var(--paper); border:1px solid rgba(15,46,33,.08); box-shadow:0 18px 40px -22px rgba(15,46,33,.45); transition:transform .3s var(--ease), box-shadow .3s var(--ease);}
 .info-item:hover{transform:translateY(-4px); box-shadow:0 26px 48px -22px rgba(15,46,33,.55);}
 .info-item strong{font-family:var(--serif); font-weight:500; font-size:1.05rem;}
 .cat-card{transition:transform .3s var(--ease), box-shadow .3s var(--ease), border-color .3s;}
