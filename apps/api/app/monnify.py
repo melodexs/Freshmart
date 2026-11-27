@@ -22,6 +22,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -33,6 +34,11 @@ from fastapi.concurrency import run_in_threadpool
 from . import config
 
 TIMEOUT_SECONDS = 30
+# Monnify's sandbox sits behind Cloudflare, which rejects requests that identify themselves as
+# Python's default client ("Python-urllib/3.x") with HTTP 403 "error code: 1010". Every call must
+# therefore carry a truthful application identity of our own.
+USER_AGENT = "Freshmart-OGS/1.0 (+https://freshmart-melodexs.onrender.com)"
+
 # Refresh this many seconds before the token Monnify gave us actually expires.
 TOKEN_REFRESH_MARGIN = 60
 
@@ -58,9 +64,26 @@ class MonnifyError(Exception):
     the two very differently: a temporary outage must not cancel a customer's order.
     """
 
-    def __init__(self, message: str, *, transient: bool = False) -> None:
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str,
+        *,
+        transient: bool = False,
+        status: int | None = None,
+        response_code: str = "",
+        stage: str = "",
+        upstream_message: str = "",
+    ) -> None:
+        # The message itself is sanitised too: an upstream body that echoes a credential must
+        # not survive in str(exc), a traceback or a log line, not just in the stored fields.
+        safe_message = safe_text(message)
+        super().__init__(safe_message)
         self.transient = transient
+        # Diagnostics for the admin payment view. Sanitised, never a header, key or token.
+        self.status = status
+        self.response_code = response_code
+        self.stage = stage
+        self.upstream_message = safe_text(upstream_message or safe_message)
 
 
 def is_ready() -> bool:
@@ -85,6 +108,7 @@ def _request_sync(method: str, url: str, payload: dict | None, headers: dict) ->
     if payload is not None:
         data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("User-Agent", USER_AGENT)
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept", "application/json")
     for key, value in headers.items():
@@ -104,11 +128,71 @@ def _request_sync(method: str, url: str, payload: dict | None, headers: dict) ->
 
 
 def _parse(body: str) -> dict:
+    """Monnify's own replies are JSON. Anything else came from an intermediary, not the API."""
+    text = (body or "").strip()
+    if not text:
+        return {"_edge": True, "responseMessage": ""}
     try:
-        parsed = json.loads(body or "{}")
+        parsed = json.loads(text)
     except ValueError:
-        return {"responseMessage": (body or "")[:200]}
-    return parsed if isinstance(parsed, dict) else {"responseBody": parsed}
+        return {"_edge": True, "responseMessage": text[:200]}
+    if not isinstance(parsed, dict):
+        return {"_edge": True, "responseBody": parsed}
+    return parsed
+
+
+_AUTH_VALUE = re.compile(
+    r"(?i)\bauthorization\b\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;\"']+)"
+)
+_KEY_PATTERNS = re.compile(
+    r"(Bearer\s+[^\s,;]+|Basic\s+[^\s,;]+|MK_[A-Za-z0-9_]+|SK_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{10,})"
+)
+# A configured secret is only worth matching literally when it is long enough not to be a
+# substring of ordinary words.
+_MIN_SECRET_LENGTH = 8
+
+
+def _configured_secrets() -> list[str]:
+    """Our own credentials, read from the environment at call time, never logged themselves."""
+    return [
+        value
+        for value in (config.MONNIFY_SECRET_KEY, config.MONNIFY_API_KEY)
+        if value and len(value) >= _MIN_SECRET_LENGTH
+    ]
+
+
+def safe_text(value: str) -> str:
+    """Upstream text that is safe to persist and show staff: no keys, tokens or headers.
+
+    Three passes, most specific first: whole ``Authorization`` header values (with or without a
+    scheme), the credential shapes we know (Bearer/Basic, Monnify keys, JWTs), then our own
+    configured credentials in case one arrives with no recognisable shape at all. Ordinary words
+    survive: only a real value after ``authorization:``/``authorization=`` is removed, so a
+    sentence like "check the authorization settings" is left alone.
+    """
+    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
+    text = _AUTH_VALUE.sub("Authorization: [redacted]", text)
+    text = _KEY_PATTERNS.sub("[redacted]", text)
+    for secret in _configured_secrets():
+        text = text.replace(secret, "[redacted]")
+    return text[:200]
+
+
+def _code(body: dict) -> str:
+    return safe_text(str(body.get("responseCode") or ""))[:32]
+
+
+def _is_transient(status: int, body: dict) -> bool:
+    """True when the call deserves another try rather than a cancelled order.
+
+    A JSON error from Monnify is its own verdict. A non-JSON or empty reply came from the edge
+    (Cloudflare, a proxy, a gateway) and says nothing about this order, so it is treated as a
+    temporary infrastructure problem.
+    """
+    if body.get("_edge"):
+        return True
+    return status >= 500 or status == 429
 
 
 def _basic_auth_header() -> dict:
@@ -164,7 +248,7 @@ async def access_token(force: bool = False) -> str:
             _basic_auth_header(),
         )
         if status != 200 or not body.get("requestSuccessful"):
-            raise MonnifyError(_message(body, "Monnify sign-in failed."))
+            raise _error(body, status, "Monnify sign-in failed.", stage="authenticate")
         data = body.get("responseBody") or {}
         token = str(data.get("accessToken") or "")
         if not token:
@@ -246,11 +330,22 @@ async def _checked(
         reset_token_cache()
         status, body = await _send(method, path, payload, params, force_auth=True)
     if status != 200 or not body.get("requestSuccessful"):
-        raise MonnifyError(
-            _message(body, f"Monnify could not {what}."),
-            transient=status >= 500 or status == 429,
-        )
+        raise _error(body, status, f"Monnify could not {what}.", stage=what)
     return body
+
+
+def _error(body: dict, status: int, fallback: str, *, stage: str) -> MonnifyError:
+    """One place that turns a failed reply into a diagnostic error, with safe fields only."""
+    detail = _message(body, fallback)
+    message = "Monnify's gateway refused the request." if body.get("_edge") else detail
+    return MonnifyError(
+        message,
+        transient=_is_transient(status, body),
+        status=status,
+        response_code=_code(body),
+        stage=stage,
+        upstream_message=detail,
+    )
 
 
 def _message(body: dict, fallback: str) -> str:
