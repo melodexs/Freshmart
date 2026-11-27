@@ -519,6 +519,15 @@ async def staff_set_status(request: Request, order_id: str, status: str = Form("
             request,
             ("error", f'Order {order_id} cannot move from "{order["status"]}" to "{status}".'),
         )
+    if order_status.is_fulfilment(status) and payments.has_open_discrepancy(order):
+        return await _store_feed(
+            request,
+            (
+                "error",
+                f"Order {order_id} has an unresolved payment discrepancy. Resolve it before "
+                "moving the order forward.",
+            ),
+        )
     # Atomic: only applies if the status is still what staff were looking at.
     ok = await db.update_order_status(order_id, status, allowed_from=[order["status"]])
     if not ok:

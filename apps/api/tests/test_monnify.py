@@ -1282,17 +1282,38 @@ def test_two_contenders_cannot_take_over_the_same_stale_lock(monnify_client):
     assert sum(1 for r in results if r) == 1
 
 
+STAFF = {"x-staff-key": "staff-test-key"}
+
+
+def _overpaid_order(c, extra=500):
+    """A paid order that received more than it asked for, with the flag still open."""
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    amount = order["total"] + extra
+    c.fake.results[reference] = _paid_result(reference, amount)
+    assert webhook(c, webhook_payload(reference, amount=amount)).status_code == 200
+    stored = order_of(c, order["id"])
+    assert stored["paymentDetail"]["needsReconciliation"]["overpaidBy"] == extra
+    return stored
+
+
 def test_admin_resolves_the_overpayment_before_fulfilment(monnify_client):
     """N2.6: the excess is recorded, blocks progression, and a human closes it."""
     c = monnify_client
-    order = place(c).json()["order"]
+    order = _overpaid_order(c)
     total = order["total"]
-    reference = order["paymentDetail"]["monnify"]["paymentReference"]
-    c.fake.results[reference] = _paid_result(reference, total + 500)
-    webhook(c, webhook_payload(reference, amount=total + 500))
-    assert order_of(c, order["id"])["paymentDetail"]["needsReconciliation"]["overpaidBy"] == 500
+    staff = STAFF
 
-    staff = {"x-staff-key": "staff-test-key"}
+    # The backend, not the admin page, refuses the move.
+    blocked = c.post(
+        f"/api/store/admin/orders/{order['id']}/status",
+        json={"status": "Preparing your order"},
+        headers=staff,
+    )
+    assert blocked.status_code == 409
+    assert "unresolved payment discrepancy" in blocked.json()["error"]
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+    assert total == order["total"]
     assert (
         c.post(f"/api/store/admin/orders/{order['id']}/resolve-payment", json={}, headers=staff)
     ).status_code == 400
@@ -1324,3 +1345,253 @@ def test_resolve_needs_staff_and_an_actual_discrepancy(monnify_client):
         401,
         403,
     )
+
+
+# ---------- third round: server-side gate, late receipts, issue list, budgets ----------
+
+
+def _status(c, order, target):
+    return c.post(
+        f"/api/store/admin/orders/{order['id']}/status",
+        json={"status": target},
+        headers=STAFF,
+    )
+
+
+def test_overpaid_order_cannot_move_to_any_fulfilment_state(monnify_client):
+    c = monnify_client
+    order = _overpaid_order(c)
+    for target in (
+        "Preparing your order",
+        "Ready for dispatch",
+        "Out for delivery",
+        "Delivered",
+    ):
+        r = _status(c, order, target)
+        assert r.status_code == 409, target
+        assert order_of(c, order["id"])["status"] == "Payment confirmed"
+    assert (
+        "unresolved payment discrepancy"
+        in _status(c, order, "Preparing your order").json()["error"]
+    )
+
+
+def test_staff_html_feed_also_blocks_an_overpaid_order(monnify_client):
+    c = monnify_client
+    order = _overpaid_order(c)
+    r = c.post(
+        f"/api/store/ui/orders/{order['id']}/status",
+        data={"status": "Preparing your order"},
+        headers=STAFF,
+    )
+    assert r.status_code == 200
+    assert "unresolved payment discrepancy" in r.text
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+
+
+def test_overpaid_order_moves_after_resolution(monnify_client):
+    c = monnify_client
+    order = _overpaid_order(c)
+    resolved = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Refunded the difference to the customer"},
+        headers=STAFF,
+    )
+    assert resolved.status_code == 200
+    assert _status(c, order, "Preparing your order").status_code == 200
+    assert order_of(c, order["id"])["status"] == "Preparing your order"
+
+
+def test_ordinary_paid_order_still_moves(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"])
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+    assert _status(c, order, "Preparing your order").status_code == 200
+
+
+def test_pay_on_delivery_is_unaffected_by_the_payment_gate(monnify_client):
+    c = monnify_client
+    order = place(c, payMethod="delivery").json()["order"]
+    assert _status(c, order, "Preparing your order").status_code == 200
+
+
+def test_late_receipt_after_settlement_moves_paid_amount(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    old = _expire(c, order)
+    fresh = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"]
+    replacement = fresh["paymentReference"]
+    c.fake.results[replacement] = _paid_result(replacement, total)
+    webhook(c, webhook_payload(replacement, amount=total))
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+
+    c.fake.results[old] = _paid_result(old, 2300)
+    assert webhook(c, webhook_payload(old, amount=2300)).status_code == 200
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert detail["paidAmount"] == total + 2300
+    assert detail["overpaidBy"] == 2300
+    assert detail["needsReconciliation"]["reason"] == "payment_overpaid_after_settlement"
+    assert _status(c, order, "Preparing your order").status_code == 409
+
+    # The same delivery again changes nothing and does not raise a second issue.
+    assert webhook(c, webhook_payload(old, amount=2300)).status_code == 200
+    again = order_of(c, order["id"])["paymentDetail"]
+    assert again["paidAmount"] == total + 2300
+    assert len(again["reconciliationIssues"]) == 1
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+
+
+def test_late_receipt_that_adds_nothing_does_not_change_the_order(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, total)
+    webhook(c, webhook_payload(reference, amount=total))
+    before = order_of(c, order["id"])["paymentDetail"]
+
+    c.fake.results[reference] = _paid_result(reference, 0, paymentStatus="PENDING")
+    assert webhook(c, webhook_payload(reference, amount=0, status="PENDING")).status_code == 200
+    after = order_of(c, order["id"])["paymentDetail"]
+    assert after["paidAmount"] == before["paidAmount"] == total
+    assert "overpaidBy" not in after
+    assert not after.get("needsReconciliation")
+
+
+def test_multiple_late_receipts_add_up(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    total = order["total"]
+    first = _expire(c, order)
+    second = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"][
+        "paymentReference"
+    ]
+    _expire(c, order)
+    third = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"]["paymentReference"]
+    c.fake.results[third] = _paid_result(third, total)
+    webhook(c, webhook_payload(third, amount=total))
+    assert order_of(c, order["id"])["status"] == "Payment confirmed"
+
+    c.fake.results[first] = _paid_result(first, 1000)
+    webhook(c, webhook_payload(first, amount=1000))
+    c.fake.results[second] = _paid_result(second, 500)
+    webhook(c, webhook_payload(second, amount=500))
+
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert detail["paidAmount"] == total + 1500
+    assert detail["overpaidBy"] == 1500
+    assert len(detail["reconciliationIssues"]) >= 1
+
+
+def test_two_discrepancies_resolve_one_and_keep_the_other(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"], currency="USD")
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+    c.fake.results[reference] = _paid_result(reference, order["total"], paymentMethod="CARD")
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert len(detail["reconciliationIssues"]) == 2
+    first_id = detail["reconciliationIssues"][0]["id"]
+    assert detail["needsReconciliation"]["reason"] == "payment_currency_mismatch"
+
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Currency mismatch handled at the bank", "issueId": first_id},
+        headers=STAFF,
+    )
+    assert r.status_code == 200
+    assert r.json()["openIssues"] == 1
+    detail = order_of(c, order["id"])["paymentDetail"]
+    assert detail["needsReconciliation"]["reason"] == "payment_method_mismatch"
+
+    # Resolving the second, without naming it, closes the last one.
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Card payment reversed"},
+        headers=STAFF,
+    )
+    assert r.status_code == 200
+    assert r.json()["openIssues"] == 0
+    assert not order_of(c, order["id"])["paymentDetail"].get("needsReconciliation")
+
+
+def test_resolving_an_unknown_issue_is_rejected(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"], currency="USD")
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Nope", "issueId": "rec-not-a-real-id"},
+        headers=STAFF,
+    )
+    assert r.status_code == 404
+    assert order_of(c, order["id"])["paymentDetail"]["needsReconciliation"]
+
+
+def test_deep_checks_are_budgeted(monnify_client):
+    c = monnify_client
+    order = place(c).json()["order"]
+    before = len(c.fake.queries)
+    for _ in range(5):
+        assert c.get(f"/api/payments/{order['id']}?check=1").status_code == 200
+    used = len(c.fake.queries) - before
+    assert used <= 10  # at most the current and one older attempt per press
+
+    blocked = c.get(f"/api/payments/{order['id']}?check=1")
+    assert blocked.status_code == 429
+    assert blocked.json()["retryAfter"] >= 1
+    assert len(c.fake.queries) - before == used  # the blocked press cost no Monnify call
+
+    # Ten more presses change nothing while the budget is spent.
+    for _ in range(10):
+        assert c.get(f"/api/payments/{order['id']}?check=1").status_code == 429
+    assert len(c.fake.queries) - before == used
+
+    # Ordinary polling is untouched by the deep-check budget.
+    assert c.get(f"/api/payments/{order['id']}").status_code == 200
+
+
+def test_legacy_single_flag_still_blocks_and_resolves(monnify_client):
+    """An order flagged by the earlier single-slot code must still be gated and resolvable."""
+    import asyncio
+
+    from app import db
+
+    c = monnify_client
+    order = place(c).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results[reference] = _paid_result(reference, order["total"])
+    webhook(c, webhook_payload(reference, amount=order["total"]))
+    asyncio.new_event_loop().run_until_complete(
+        db.merge_payment_detail(
+            order["id"],
+            {
+                "needsReconciliation": {
+                    "reason": "payment_overpaid",
+                    "overpaidBy": 500,
+                    "amountPaid": order["total"] + 500,
+                    "orderTotal": order["total"],
+                },
+                "reconciliationIssues": [],
+            },
+        )
+    )
+
+    assert _status(c, order, "Preparing your order").status_code == 409
+    r = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Refunded the extra 500"},
+        headers=STAFF,
+    )
+    assert r.status_code == 200
+    assert r.json()["openIssues"] == 0
+    assert _status(c, order, "Preparing your order").status_code == 200

@@ -177,10 +177,32 @@ function apply(payment: MonnifyPayment): void {
 async function checkNow(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   button.textContent = "Checking…";
-  const fresh = await fetchStatus(true);
-  if (fresh) apply(fresh);
+  let note = "";
+  try {
+    const res = await fetch(`/api/payments/${encodeURIComponent(orderId)}?check=1`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (res.status === 429) {
+      const data = (await res.json()) as { error?: string };
+      note = data.error ?? "Too many checks just now. Please try again in a minute.";
+    } else if (res.ok) {
+      const data = (await res.json()) as { payment?: MonnifyPayment | null };
+      if (data.payment) apply(data.payment);
+    } else {
+      note = "Could not check just now. Please try again.";
+    }
+  } catch {
+    note = "Could not check just now. Please try again.";
+  }
   button.disabled = false;
   button.textContent = "I have sent it — check now";
+  if (note) {
+    const box = panel();
+    const old = box.querySelector(".pay-check-note");
+    if (old) old.remove();
+    box.append(h("p", { class: "small-note pay-check-note", text: note }));
+  }
 }
 
 async function requestNewAccount(button: HTMLButtonElement): Promise<void> {

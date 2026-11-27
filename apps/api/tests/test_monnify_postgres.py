@@ -400,3 +400,69 @@ def test_postgres_reference_lookup_can_use_the_gin_index(pg_client):
 
     text = asyncio.new_event_loop().run_until_complete(plan())
     assert "orders_payment_detail_gin" in text, text
+
+
+STAFF = {"x-staff-key": "staff-test-key"}
+
+
+def test_postgres_late_receipt_updates_paid_amount(pg_client):
+    """The reviewer's case on the Postgres store: 4,600 settles, then 2,300 lands late."""
+    from app import db
+
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    total = order["total"]
+    old = order["paymentDetail"]["monnify"]["paymentReference"]
+    _expire(c, order["id"], order["paymentDetail"]["monnify"])
+    fresh = c.post(f"/api/payments/{order['id']}/new-account").json()["payment"]
+    replacement = fresh["paymentReference"]
+
+    c.fake.results = {replacement: _paid(replacement, total)}
+    assert webhook(c, replacement, total).status_code == 200
+    assert run(c, db.get_order, order["id"])["status"] == "Payment confirmed"
+
+    c.fake.results = {old: _paid(old, 2300)}
+    assert webhook(c, old, 2300).status_code == 200
+    detail = run(c, db.get_order, order["id"])["paymentDetail"]
+    assert detail["paidAmount"] == total + 2300
+    assert detail["overpaidBy"] == 2300
+    assert detail["needsReconciliation"]["reason"] == "payment_overpaid_after_settlement"
+
+    # The server, not the admin page, refuses to fulfil it.
+    blocked = c.post(
+        f"/api/store/admin/orders/{order['id']}/status",
+        json={"status": "Preparing your order"},
+        headers=STAFF,
+    )
+    assert blocked.status_code == 409
+    assert run(c, db.get_order, order["id"])["status"] == "Payment confirmed"
+
+    # A repeated delivery is idempotent on Postgres too.
+    assert webhook(c, old, 2300).status_code == 200
+    again = run(c, db.get_order, order["id"])["paymentDetail"]
+    assert again["paidAmount"] == total + 2300
+    assert len(again["reconciliationIssues"]) == 1
+
+
+def test_postgres_resolution_unblocks_fulfilment(pg_client):
+    from app import db
+
+    c = pg_client
+    order = c.post("/api/orders", json=ORDER).json()["order"]
+    reference = order["paymentDetail"]["monnify"]["paymentReference"]
+    c.fake.results = {reference: _paid(reference, order["total"] + 500)}
+    assert webhook(c, reference, order["total"] + 500).status_code == 200
+
+    resolved = c.post(
+        f"/api/store/admin/orders/{order['id']}/resolve-payment",
+        json={"note": "Refunded the excess"},
+        headers=STAFF,
+    )
+    assert resolved.status_code == 200
+    moved = c.post(
+        f"/api/store/admin/orders/{order['id']}/status",
+        json={"status": "Preparing your order"},
+        headers=STAFF,
+    )
+    assert moved.status_code == 200
+    assert run(c, db.get_order, order["id"])["status"] == "Preparing your order"

@@ -58,9 +58,22 @@ async def payment_status(
     if order is None:  # pragma: no cover - _owned_order returns one or the other
         return err(404, "That order does not exist.")
 
+    deep = bool(check)
+    if deep and order.get("payMethod") == "before" and not payments.is_paid(order):
+        allowed, retry = payments.deep_check_available(order_id)
+        if not allowed:
+            return JSONResponse(
+                {
+                    "error": f"Too many manual checks. Try again in {retry} seconds.",
+                    "retryAfter": retry,
+                },
+                status_code=429,
+                headers={"Retry-After": str(retry)},
+            )
+
     if order.get("payMethod") == "before" and not payments.is_paid(order):
         await payments.expire_stale_reservation(order)
-        await payments.sync_status(order, throttle=True, deep=bool(check))
+        await payments.sync_status(order, throttle=True, deep=deep)
         fresh = await db.get_order(order_id)
         if fresh is not None:
             order = fresh

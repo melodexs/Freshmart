@@ -281,6 +281,30 @@ def _prune_last_sync() -> None:
             _LAST_SYNC.pop(key, None)
 
 
+_DEEP_CHECKS: dict[str, list[float]] = {}
+DEEP_CHECK_LIMIT = 5
+DEEP_CHECK_WINDOW = 60.0
+
+
+def deep_check_available(order_id: str) -> tuple[bool, int]:
+    """A small budget for explicit "check payment" presses, separate from normal polling.
+
+    One press can cost two Monnify queries, so the button cannot be turned into a free API
+    client. Throttled polling is untouched. Returns (allowed, seconds_until_a_slot_frees).
+    """
+    now = time.monotonic()
+    hits = [t for t in _DEEP_CHECKS.get(order_id, []) if now - t < DEEP_CHECK_WINDOW]
+    if len(hits) >= DEEP_CHECK_LIMIT:
+        _DEEP_CHECKS[order_id] = hits
+        return False, max(1, int(DEEP_CHECK_WINDOW - (now - hits[0])) + 1)
+    hits.append(now)
+    _DEEP_CHECKS[order_id] = hits
+    if len(_DEEP_CHECKS) > _LAST_SYNC_LIMIT:
+        for key in [k for k, v in _DEEP_CHECKS.items() if not v or now - v[-1] > DEEP_CHECK_WINDOW]:
+            _DEEP_CHECKS.pop(key, None)
+    return True, 0
+
+
 # ---------- creating the account ----------
 
 
@@ -718,21 +742,68 @@ def _meta_order_id(data: dict) -> str:
     return ""
 
 
+def _new_issue(reason: str, **fields) -> dict:
+    """One unresolved discrepancy, with a stable id so a human can close exactly this one."""
+    return {
+        "id": f"rec-{secrets.token_hex(4)}",
+        "reason": reason,
+        "resolved": False,
+        "seenAt": now_iso(),
+        **fields,
+    }
+
+
+def open_issues(order: dict) -> list[dict]:
+    """Every discrepancy still waiting for a human, oldest first.
+
+    Orders flagged before the issue list existed carry only needsReconciliation, so that single
+    flag is read as one open issue rather than being ignored.
+    """
+    detail = _detail(order)
+    issues = [i for i in (detail.get("reconciliationIssues") or []) if isinstance(i, dict)]
+    open_only = [i for i in issues if not i.get("resolved")]
+    if open_only:
+        return open_only
+    legacy = detail.get("needsReconciliation")
+    if isinstance(legacy, dict) and legacy:
+        return [{**legacy, "id": str(legacy.get("id") or "rec-legacy"), "resolved": False}]
+    return []
+
+
+def has_open_discrepancy(order: dict) -> bool:
+    """True while any payment discrepancy is unresolved, whoever is asking."""
+    return bool(open_issues(order))
+
+
+def _issues_with(order: dict, issue: dict) -> dict:
+    """A merge patch that appends an issue without ever hiding an earlier open one."""
+    detail = _detail(order)
+    issues = [i for i in (detail.get("reconciliationIssues") or []) if isinstance(i, dict)]
+    issues.append(issue)
+    patch: dict = {"reconciliationIssues": issues[-25:]}
+    if not detail.get("needsReconciliation"):
+        patch["needsReconciliation"] = issue
+    return patch
+
+
 async def _flag_reconciliation(
     order: dict, reference: str, data: dict, reason: str, extra: dict | None = None
 ) -> None:
-    """Keep the money visible for a human instead of guessing what it was for."""
-    payload = {
-        "reason": reason,
-        "paymentReference": reference,
-        "paymentStatus": data.get("paymentStatus"),
-        "amountPaid": _amount(data.get("amountPaid")),
-        "transactionReference": str(data.get("transactionReference") or ""),
-        "seenAt": now_iso(),
+    """Keep the money visible for a human instead of guessing what it was for.
+
+    A new discrepancy is appended to the list. It never replaces an unresolved earlier one.
+    """
+    issue = _new_issue(
+        reason,
+        paymentReference=reference,
+        paymentStatus=data.get("paymentStatus"),
+        amountPaid=_amount(data.get("amountPaid")),
+        transactionReference=str(data.get("transactionReference") or ""),
         **(extra or {}),
-    }
-    await db.merge_payment_detail(order["id"], {"needsReconciliation": payload})
-    await db.add_audit("monnify", reason, order["id"], payload)
+    )
+    fresh = await db.get_order(order["id"]) or order
+    await db.merge_payment_detail(order["id"], _issues_with(fresh, issue))
+    await db.add_audit("monnify", reason, order["id"], issue)
 
 
 def _with_history_status(attempt: dict, reference: str, patch: dict) -> list[dict]:
@@ -790,17 +861,61 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
     method = str(data.get("paymentMethod") or "").upper()
 
     if is_paid(order):
-        # A retried or late notification for an order we already settled never changes the
-        # order, but money arriving after settlement still has to be visible to a human.
-        matched, _historical = attempt_for_reference(attempt, seen_reference)
+        # A retried or late notification never downgrades a settled order, but a bigger verified
+        # receipt still moves the money totals and stays visible to a human.
+        detail = _detail(order)
+        stored_paid = _amount(detail.get("paidAmount"))
+        matched, historical = attempt_for_reference(attempt, seen_reference)
         received = _amount(data.get("amountPaid"))
+        patch: dict = {}
+        merged = attempt
         if matched is not None:
+            previous = _amount(matched.get("amountPaid"))
+            if received > previous:
+                # A fresh verification replaces this attempt's own figure; it never adds to it.
+                entry_patch = {
+                    "status": matched.get("status") or PAID,
+                    "amountPaid": received,
+                    "checkedAt": now_iso(),
+                    "lastSource": source,
+                }
+                if historical:
+                    merged = {
+                        **attempt,
+                        "history": _with_history_status(attempt, seen_reference, entry_patch),
+                    }
+                else:
+                    merged = {**attempt, **entry_patch}
+                patch["monnify"] = merged
             cumulative = _cumulative_received(
-                attempt, matched_reference=seen_reference, paid=received
+                attempt, matched_reference=seen_reference, paid=max(received, previous)
             )
         else:
-            cumulative = _amount(_detail(order).get("paidAmount"))
+            cumulative = stored_paid
+        cumulative = max(cumulative, stored_paid)
         excess = cumulative - total if total > 0 else 0
+        if cumulative > stored_paid:
+            patch["paidAmount"] = cumulative
+            patch["cumulativePaid"] = cumulative
+            if excess > 0:
+                patch["overpaidBy"] = excess
+                issue = _new_issue(
+                    "payment_overpaid_after_settlement",
+                    paymentReference=seen_reference,
+                    paymentStatus=data.get("paymentStatus"),
+                    amountPaid=cumulative,
+                    transactionReference=str(data.get("transactionReference") or ""),
+                    source=source,
+                    orderTotal=total,
+                    overpaidBy=excess,
+                )
+                fresh = await db.get_order(order["id"]) or order
+                patch.update(_issues_with(fresh, issue))
+                await db.add_audit(
+                    "monnify", "payment_overpaid_after_settlement", order["id"], issue
+                )
+        if patch:
+            await db.merge_payment_detail(order["id"], patch)
         await db.add_audit(
             "monnify",
             "payment_already_settled",
@@ -810,23 +925,11 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                 "paymentReference": seen_reference,
                 "paymentStatus": data.get("paymentStatus"),
                 "cumulativePaid": cumulative,
+                "paidAmount": max(stored_paid, cumulative),
                 "overpaidBy": max(0, excess),
             },
         )
-        if matched is not None and excess > 0:
-            await _flag_reconciliation(
-                order,
-                seen_reference,
-                data,
-                "payment_overpaid_after_settlement",
-                {
-                    "source": source,
-                    "cumulativePaid": cumulative,
-                    "orderTotal": total,
-                    "overpaidBy": excess,
-                },
-            )
-        return attempt
+        return merged
 
     matched, historical = attempt_for_reference(attempt, seen_reference)
     if matched is None:
@@ -947,16 +1050,15 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
         merged["overpaidBy"] = overpaid_by
 
     if final in SETTLED_STATES:
-        needs = None
+        issue = None
         if overpaid_by > 0:
-            needs = {
-                "reason": "payment_overpaid",
-                "paymentReference": seen_reference,
-                "amountPaid": cumulative,
-                "orderTotal": total,
-                "overpaidBy": overpaid_by,
-                "seenAt": now_iso(),
-            }
+            issue = _new_issue(
+                "payment_overpaid",
+                paymentReference=seen_reference,
+                amountPaid=cumulative,
+                orderTotal=total,
+                overpaidBy=overpaid_by,
+            )
         record = {
             "paid": True,
             "paidAmount": cumulative,
@@ -966,8 +1068,8 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
             "confirmedBy": f"monnify ({source})",
             "monnify": merged,
         }
-        if needs:
-            record["needsReconciliation"] = needs
+        if issue:
+            record.update(_issues_with(order, issue))
         moved = await db.mark_paid_verified(
             order["id"], order_status.AWAITING_PAYMENT, order_status.PAID, record
         )
@@ -987,9 +1089,9 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                     "historicalAttempt": historical,
                 },
             )
-            if needs:
+            if issue:
                 await db.add_audit(
-                    "monnify", "payment_overpaid", order["id"], {**needs, "source": source}
+                    "monnify", "payment_overpaid", order["id"], {**issue, "source": source}
                 )
         else:
             fresh = await db.get_order(order["id"]) or order
@@ -1005,27 +1107,24 @@ async def reconcile(order: dict, data: dict, *, source: str) -> dict:
                         "amountPaid": cumulative,
                     },
                 )
-                if needs:
+                if issue:
                     await _flag_reconciliation(
                         order,
                         seen_reference,
                         data,
                         "payment_overpaid_after_settlement",
-                        {**needs, "source": source},
+                        {**issue, "source": source},
                     )
             else:
+                unmatched = _new_issue(
+                    "payment_received_unmatched",
+                    paymentReference=seen_reference,
+                    amountPaid=cumulative,
+                    orderStatus=fresh.get("status"),
+                )
                 await db.merge_payment_detail(
                     order["id"],
-                    {
-                        "monnify": merged,
-                        "needsReconciliation": {
-                            "reason": "payment_received_unmatched",
-                            "paymentReference": seen_reference,
-                            "amountPaid": cumulative,
-                            "orderStatus": fresh.get("status"),
-                            "seenAt": now_iso(),
-                        },
-                    },
+                    {"monnify": merged, **_issues_with(fresh, unmatched)},
                 )
                 await db.add_audit(
                     "monnify",
