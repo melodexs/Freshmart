@@ -9,9 +9,11 @@ without leaking a key, a secret or a header.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import json
 import sys
+import time
 import urllib.error
 
 import pytest
@@ -376,3 +378,192 @@ def test_monnify_json_rejection_is_permanent_and_still_cancels(tmp_path, monkeyp
         assert attempt["lastErrorStatus"] == 400
         assert attempt["lastErrorUpstream"] == "Invalid contract code"
         assert order["paymentDetail"].get("stockReleased") is True
+
+
+# ---------- L1: the exact production shape, an empty 403 body ----------
+
+
+@contextlib.contextmanager
+def _client(tmp_path, monkeypatch, status: int, body: object):
+    """A running app whose every Monnify call gets one fixed reply."""
+    _load(monkeypatch, tmp_path)
+    net = FakeNetwork()
+    net.sticky = (status, body)
+    monkeypatch.setattr("urllib.request.urlopen", net)
+
+    from fastapi.testclient import TestClient
+
+    from app import db, ratelimit
+    from app.main import app
+
+    ratelimit.reset()
+    with TestClient(app) as c:
+        asyncio.new_event_loop().run_until_complete(
+            db.set_setting(
+                "bank_details",
+                {"bank": "Test Bank", "accountName": "OGS Test", "accountNumber": "0123456789"},
+            )
+        )
+        c.post("/api/auth/signup", json=SIGNUP)
+        c.post("/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]})
+        c.net = net
+        yield c
+
+
+@pytest.fixture()
+def empty_body_client(tmp_path, monkeypatch):
+    """Cloudflare's reply as Render actually saw it: 403 with no body at all."""
+    with _client(tmp_path, monkeypatch, 403, "") as c:
+        yield c
+
+
+def test_empty_body_403_is_an_edge_block_and_holds_stock_until_expiry(empty_body_client):
+    c = empty_body_client
+    response = c.post("/api/orders", json={**ORDER, "payMethod": "before"})
+    assert response.status_code == 502
+    assert "items are held" in response.json()["error"], "the customer is told the order is safe"
+
+    from app import db, payments
+
+    loop = asyncio.new_event_loop()
+    order = loop.run_until_complete(db.get_all_orders())[-1]
+    detail = order["paymentDetail"]
+    attempt = detail["monnify"]
+
+    # Classification: an empty reply is the edge, not Monnify's verdict.
+    assert attempt["transient"] is True
+    assert attempt["lastError"] == "Monnify's gateway refused the request."
+    assert attempt["lastErrorStatus"] == 403
+    assert attempt["lastErrorStage"] == "authenticate"
+    assert attempt["lastErrorCode"] == ""
+    assert len(c.net.requests) == 2, "sign-in plus one retry, and nothing else"
+
+    # The order and its stock survive.
+    assert order["status"] == "Awaiting payment"
+    assert not detail.get("stockReleased")
+    assert float(detail["reservationExpiresAtEpoch"]) > time.time()
+
+    # And normal expiry still releases exactly once.
+    loop.run_until_complete(
+        db.merge_payment_detail(order["id"], {"reservationExpiresAtEpoch": time.time() - 5})
+    )
+    assert loop.run_until_complete(payments.sweep_stale_reservations()) == 1
+    assert loop.run_until_complete(payments.sweep_stale_reservations()) == 0
+    fresh = loop.run_until_complete(db.get_order(order["id"]))
+    audit = loop.run_until_complete(db.get_audit(order["id"]))
+    assert fresh["status"] == "Cancelled"
+    assert fresh["paymentDetail"].get("stockReleased") is True
+    assert len([a for a in audit if a.get("action") == "payment_reservation_expired"]) == 1
+
+
+# ---------- L2: sanitisation ----------
+
+
+def test_configured_secret_is_redacted_without_any_prefix(transport):
+    monnify, _ = transport
+    text = f"Rejected: the credentials {SECRET} are not valid for this environment."
+
+    cleaned = monnify.safe_text(text)
+
+    assert SECRET not in cleaned
+    assert cleaned.startswith("Rejected: the credentials")
+    assert cleaned.endswith("are not valid for this environment.")
+
+
+def test_authorization_header_values_are_redacted(transport):
+    monnify, _ = transport
+    cases = [
+        "Authorization: Bearer abc123def456",
+        "authorization: Basic dXNlcjpwYXNzd29yZA==",
+        '"authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.abcdefghij"',
+        "Authorization: bare-token-value",
+        "authorization=Bearer another-token",
+    ]
+    for raw in cases:
+        cleaned = monnify.safe_text(raw)
+        for fragment in (
+            "abc123def456",
+            "dXNlcjpwYXNz",
+            "eyJhbGci",
+            "bare-token-value",
+            "another-token",
+        ):
+            assert fragment not in cleaned, raw
+        assert "[redacted]" in cleaned, raw
+
+
+def test_sensitive_values_inside_a_long_message_are_redacted(transport):
+    monnify, _ = transport
+    text = (
+        "Monnify rejected the request because the Authorization: Bearer "
+        "eyJhbGciOiJIUzI1NiJ9.payload.signature sent with key " + API_KEY + " did not match "
+        "the contract, and the stored secret " + SECRET + " was rejected too."
+    )
+
+    cleaned = monnify.safe_text(text)
+
+    for fragment in (SECRET, API_KEY, "eyJhbGci", "payload.signature"):
+        assert fragment not in cleaned, fragment
+    assert "Monnify rejected the request because the" in cleaned
+    assert "did not match the contract" in cleaned
+    assert len(cleaned) <= 200
+
+
+def test_ordinary_diagnostics_survive_sanitisation(transport):
+    monnify, _ = transport
+    for message in (
+        "Invalid contract code",
+        "Please check the authorization settings on the merchant account.",
+        "Monnify could not start the payment.",
+        "The customer has not authorised the transfer yet.",
+    ):
+        assert monnify.safe_text(message) == message
+
+
+@pytest.fixture()
+def secret_echo_client(tmp_path, monkeypatch):
+    """Monnify (or a proxy) echoing credentials back inside its own error message."""
+    body = {
+        "requestSuccessful": False,
+        "responseCode": "99",
+        "responseMessage": (
+            "Bad credentials "
+            + SECRET
+            + " with Authorization: Bearer "
+            + SECRET
+            + " and key "
+            + API_KEY
+            + " rejected"
+        ),
+    }
+    with _client(tmp_path, monkeypatch, 401, body) as c:
+        yield c
+
+
+def test_echoed_credentials_never_reach_the_order_the_audit_or_the_exception(secret_echo_client):
+    c = secret_echo_client
+    assert c.post("/api/orders", json={**ORDER, "payMethod": "before"}).status_code == 502
+
+    from app import db
+
+    loop = asyncio.new_event_loop()
+    order = loop.run_until_complete(db.get_all_orders())[-1]
+    attempt = order["paymentDetail"]["monnify"]
+    audit = loop.run_until_complete(db.get_audit(order["id"]))
+
+    blob = json.dumps(order) + json.dumps(audit)
+    for fragment in (SECRET, API_KEY, "Bearer " + SECRET, "dXNlcjpwYXNz"):
+        assert fragment not in blob, fragment
+
+    assert "[redacted]" in attempt["lastErrorUpstream"]
+    assert "Bad credentials" in attempt["lastErrorUpstream"], "useful context is kept"
+    assert attempt["lastErrorStatus"] == 401
+    assert attempt["lastErrorCode"] == "99"
+    assert attempt["lastErrorStage"] == "authenticate"
+
+    # The exception string itself is safe too, so a traceback cannot leak the credential.
+    from app import monnify
+
+    error = monnify.MonnifyError(f"upstream said {SECRET} and Authorization: Bearer {SECRET}")
+    assert SECRET not in str(error)
+    assert "Bearer " not in str(error)

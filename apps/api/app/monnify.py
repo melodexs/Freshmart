@@ -74,13 +74,16 @@ class MonnifyError(Exception):
         stage: str = "",
         upstream_message: str = "",
     ) -> None:
-        super().__init__(message)
+        # The message itself is sanitised too: an upstream body that echoes a credential must
+        # not survive in str(exc), a traceback or a log line, not just in the stored fields.
+        safe_message = safe_text(message)
+        super().__init__(safe_message)
         self.transient = transient
         # Diagnostics for the admin payment view. Sanitised, never a header, key or token.
         self.status = status
         self.response_code = response_code
         self.stage = stage
-        self.upstream_message = safe_text(upstream_message or message)
+        self.upstream_message = safe_text(upstream_message or safe_message)
 
 
 def is_ready() -> bool:
@@ -138,15 +141,41 @@ def _parse(body: str) -> dict:
     return parsed
 
 
+_AUTH_VALUE = re.compile(
+    r"(?i)\bauthorization\b\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;\"']+)"
+)
 _KEY_PATTERNS = re.compile(
     r"(Bearer\s+[^\s,;]+|Basic\s+[^\s,;]+|MK_[A-Za-z0-9_]+|SK_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{10,})"
 )
+# A configured secret is only worth matching literally when it is long enough not to be a
+# substring of ordinary words.
+_MIN_SECRET_LENGTH = 8
+
+
+def _configured_secrets() -> list[str]:
+    """Our own credentials, read from the environment at call time, never logged themselves."""
+    return [
+        value
+        for value in (config.MONNIFY_SECRET_KEY, config.MONNIFY_API_KEY)
+        if value and len(value) >= _MIN_SECRET_LENGTH
+    ]
 
 
 def safe_text(value: str) -> str:
-    """Upstream text that is safe to persist and show staff: no keys, tokens or headers."""
+    """Upstream text that is safe to persist and show staff: no keys, tokens or headers.
+
+    Three passes, most specific first: whole ``Authorization`` header values (with or without a
+    scheme), the credential shapes we know (Bearer/Basic, Monnify keys, JWTs), then our own
+    configured credentials in case one arrives with no recognisable shape at all. Ordinary words
+    survive: only a real value after ``authorization:``/``authorization=`` is removed, so a
+    sentence like "check the authorization settings" is left alone.
+    """
     text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
+    text = _AUTH_VALUE.sub("Authorization: [redacted]", text)
     text = _KEY_PATTERNS.sub("[redacted]", text)
+    for secret in _configured_secrets():
+        text = text.replace(secret, "[redacted]")
     return text[:200]
 
 
